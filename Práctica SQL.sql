@@ -208,6 +208,26 @@ ORDER BY empl.empl_nombre
 vendidos en la historia. Además mostrar de esos productos, quien fue el cliente que
 mayor compra realizo.*/
 
+--La forma correcta de resolución sería esta:
+SELECT p.prod_detalle AS 'Nombre de producto',
+	   (SELECT TOP 1 f.fact_cliente
+	   FROM Factura f
+	   JOIN Item_Factura i ON f.fact_numero = i.item_numero AND f.fact_sucursal = i.item_sucursal AND f.fact_tipo = i.item_tipo
+	   WHERE i.item_producto = p.prod_codigo
+	   GROUP BY f.fact_cliente
+	   ORDER BY SUM(i.item_cantidad)) AS 'Cliente que más compras realizó'
+FROM Producto p
+WHERE p.prod_codigo IN (SELECT TOP 10 i.item_producto
+					   FROM Item_Factura i
+					   GROUP BY item_producto
+					   ORDER BY SUM(i.item_cantidad) DESC)
+					   OR p.prod_codigo IN
+					   (SELECT TOP 10 i.item_producto
+					   FROM Item_Factura i
+					   GROUP BY item_producto
+					   ORDER BY SUM(i.item_cantidad) ASC)
+
+--Esta otra da 18 rows, no se por qué...
 SELECT 
 	masYMenosVendidos.prod_codigo,
 	masYMenosVendidos.prod_detalle,
