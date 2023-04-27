@@ -3,6 +3,12 @@
 igual a $ 1000 ordenado por código de cliente.
 */
 
+
+
+
+
+
+
 SELECT 
 	clie_codigo, 
 	clie_razon_social
@@ -528,8 +534,6 @@ HAVING
 	COUNT(*) > 2 -- cuenta las filas de cada grupo 
 
 
-
-
 SELECT DISTINCT
 p.prod_codigo as [NOMBRE], 
 p2.prod_precio as [PRECIO], 
@@ -538,7 +542,7 @@ FROM
 	Composicion c join Producto p on p.prod_codigo = c.comp_producto
 	JOIN Producto p2 on p2.prod_codigo = c.comp_componente
 where comp_producto = '00001104'
-GROUP BY 
+--GROUP BY 
 
 
 SELECT DISTINCT
@@ -547,3 +551,118 @@ FROM
 	Composicion c join Producto p on p.prod_codigo = c.comp_producto
 	JOIN Producto p2 on p2.prod_codigo = c.comp_componente
 where comp_producto = '00001104'
+
+
+/*
+
+Escriba una consulta que retorne una estadística de ventas por cliente. Los campos que
+debe retornar son:
+Código del cliente
+Cantidad de veces que compro en el último año
+Promedio por compra en el último año
+Cantidad de productos diferentes que compro en el último año
+Monto de la mayor compra que realizo en el último año
+Se deberán retornar todos los clientes ordenados por la cantidad de veces que compro en
+el último año.
+No se deberán visualizar NULLs en ninguna columna
+
+*/
+
+SELECT 
+	 c.clie_codigo				AS [CODIGO CLIENTE], 
+	 count(distinct F.fact_tipo + F.fact_sucursal + fact_numero) as [CANTIDAD DE VECES QUE COMPRO], 
+	 AVG(F.fact_total)			as [PROMEDIO DE COMPRA], 
+		 (
+			SELECT 
+				count(distinct it.item_producto)
+				FROM 
+					Item_Factura it join Factura f1 on  F1.fact_tipo + F1.fact_sucursal + f1.fact_numero =  it.item_tipo + it.item_sucursal + it.item_numero
+				where f1.fact_cliente = c.clie_codigo and YEAR(f1.fact_fecha) = (select year(max(f3.fact_fecha)) from Factura f3)
+				GROUP BY f1.fact_cliente 
+		 )						as [CANTIDAD DE PRODUCTOS DIFERENTES], 
+	 MAX(fact_total)			as [MONTO DE LA MAYOR COMPRA]
+FROM 
+	Cliente c left join Factura F ON F.fact_cliente = c.clie_codigo
+WHERE 
+	YEAR(f.fact_fecha) = (select year(max(f2.fact_fecha)) from Factura f2)
+GROUP BY 
+	clie_codigo
+ORDER BY 2
+
+
+------
+
+SELECT 
+ c.clie_codigo AS [CODIGO CLIENTE], 
+ count(distinct F.fact_tipo + F.fact_sucursal + fact_numero) as [CANTIDAD DE VECES QUE COMPRO], 
+ AVG(F.fact_total) as [PROMEDIO DE COMPRA], 
+ count(distinct it.item_producto) as [CANTIDAD DE PRODUCTOS DIFERENTES], 
+ MAX(f.fact_total) as [MONTO DE LA MAYOR COMPRA]
+FROM 
+	Cliente c left join Factura F ON F.fact_cliente = c.clie_codigo
+	join Item_Factura it  on  F.fact_tipo + F.fact_sucursal + f.fact_numero =  it.item_tipo + it.item_sucursal + it.item_numero
+WHERE 
+	YEAR(f.fact_fecha) = (select year(max(f2.fact_fecha)) from Factura f2)
+GROUP BY 
+	clie_codigo
+ORDER BY 2
+
+-- mayor compra hecha
+
+SELECT 
+clie_codigo, 
+MAX(fact_total)
+FROM 
+	Cliente c join Factura F ON F.fact_cliente = c.clie_codigo
+WHERE 
+	YEAR(f.fact_fecha) = 2012
+GROUP BY clie_codigo
+
+-----CANTIDAD DE VCES QUE COMPRO EN EL ÚLTIMO AÑO (2012)
+
+SELECT 
+ clie_codigo, 
+ count(distinct F.fact_tipo + F.fact_sucursal + fact_numero)
+FROM 
+	Cliente c join Factura F ON F.fact_cliente = c.clie_codigo
+WHERE 
+	YEAR(f.fact_fecha) = 2012
+GROUP BY clie_codigo
+
+
+--- PROMEDIO POR COMPRA EN EL ULTIMO AÑO 
+
+SELECT 
+ c.clie_codigo, 
+ AVG(F.fact_total)
+FROM 
+	Cliente c join Factura F ON F.fact_cliente = c.clie_codigo
+WHERE 	
+	YEAR(f.fact_fecha) = 2012
+GROUP BY clie_codigo
+
+
+-- cantidad de productos diferentes que compro en el ultimo año 
+
+SELECT 
+f.fact_cliente, 
+count(distinct it.item_producto)
+FROM 
+	Item_Factura it join Factura f on  F.fact_tipo + F.fact_sucursal + fact_numero =  it.item_tipo + it.item_sucursal + it.item_numero
+GROUP BY f.fact_cliente 
+
+
+
+/*
+16. Con el fin de lanzar una nueva campaña comercial para los clientes que menos compran
+en la empresa, se pide una consulta SQL que retorne aquellos clientes cuyas ventas son
+inferiores a 1/3 del promedio de ventas del producto que más se vendió en el 2012.
+Además mostrar
+1. Nombre del Cliente
+2. Cantidad de unidades totales vendidas en el 2012 para ese cliente.
+3. Código de producto que mayor venta tuvo en el 2012 (en caso de existir más de 1,
+mostrar solamente el de menor código) para ese cliente.
+Aclaraciones:
+La composición es de 2 niveles, es decir, un producto compuesto solo se compone de
+productos no compuestos.
+Los clientes deben ser ordenados por código de provincia ascendente.*/SELECT*FROM Item_Factura it 
