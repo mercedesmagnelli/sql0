@@ -213,6 +213,15 @@ GROUP BY p.prod_codigo, p.prod_detalle
 /*Ejercicio 8: mostrar para el o los artículos que tengan stock en todos los depósitos, nombre del
 artículo, stock del depósito que más stock tiene.*/
 
+--Resolución del ejercicio:
+SELECT p.prod_detalle, MAX(s.stoc_cantidad) AS 'Stock del depósito con más stock'
+FROM Producto p
+JOIN STOCK s ON p.prod_codigo = s.stoc_producto
+WHERE s.stoc_cantidad > 0 
+GROUP BY p.prod_detalle
+HAVING COUNT(*) = (SELECT COUNT(*) FROM DEPOSITO)
+--ORDER BY p.prod_detalle
+
 /*Esta consulta muestra todos los productos con stock mayor que 0 en todos los depósitos en los cuales hay stock de esos productos, con las cantidades de stock.
 Sirve para entender mejor qué es lo que se está haciendo.*/
 SELECT t.prod_detalle, depo_detalle, s.stoc_cantidad, t.[Stock del depósito con más stock]
@@ -225,15 +234,6 @@ JOIN Producto p ON t.prod_detalle = p.prod_detalle
 JOIN STOCK s ON p.prod_codigo = s.stoc_producto
 JOIN DEPOSITO d ON s.stoc_deposito = d.depo_codigo
 ORDER BY t.prod_detalle ASC
-
---Resolución del ejercicio:
-SELECT p.prod_detalle, MAX(s.stoc_cantidad) AS 'Stock del depósito con más stock'
-FROM Producto p
-JOIN STOCK s ON p.prod_codigo = s.stoc_producto
-WHERE s.stoc_cantidad > 0 
-GROUP BY p.prod_detalle
-HAVING COUNT(*) = (SELECT COUNT(*) FROM DEPOSITO)
---ORDER BY p.prod_detalle
 
 /*Ejercicio 9: mostrar el código del jefe, código del empleado que lo tiene como jefe, nombre del
 mismo y la cantidad de depósitos que ambos tienen asignados.*/
@@ -346,27 +346,23 @@ aquellos productos que hayan tenido operaciones en el año 2012 y los datos deber
 ordenarse de mayor a menor por monto vendido del producto.*/
 
 SELECT p.prod_detalle,
-	   COUNT(DISTINCT c.clie_codigo) AS 'Cantidad de clientes que lo compraron',
+	   COUNT(DISTINCT f.fact_cliente) AS 'Cantidad de clientes que lo compraron',
 	   AVG(i.item_precio) AS 'Importe promedio pagado por el producto',
-	   (SELECT COUNT(d.depo_codigo)
-	   FROM Producto p1
-	   JOIN STOCK s ON p1.prod_codigo = s.stoc_producto
-	   JOIN DEPOSITO d ON s.stoc_deposito = d.depo_codigo
-	   WHERE p1.prod_codigo = p.prod_codigo AND s.stoc_cantidad > 0) AS 'Cantidad de depósitos en los cuales hay stock del producto',
+	   (SELECT COUNT(s.stoc_deposito)
+	   FROM STOCK s 
+	   WHERE s.stoc_producto = p.prod_codigo AND s.stoc_cantidad > 0) AS 'Cantidad de depósitos en los cuales hay stock del producto',
 	   (SELECT SUM(ISNULL(s.stoc_cantidad, 0))
-	   FROM Producto p1
-	   JOIN STOCK s ON p1.prod_codigo = s.stoc_producto
-	   WHERE p1.prod_codigo = p.prod_codigo) AS 'Cantidad de stock actual en todos los depósitos'
+	   FROM STOCK s
+	   WHERE s.stoc_producto = p.prod_codigo) AS 'Cantidad de stock actual en todos los depósitos'
 FROM Producto p
 JOIN Item_Factura i ON p.prod_codigo = i.item_producto
 JOIN Factura f ON i.item_numero = f.fact_numero AND i.item_sucursal = f.fact_sucursal AND i.item_tipo = f.fact_tipo
-JOIN Cliente c ON f.fact_cliente = c.clie_codigo
 WHERE YEAR(f.fact_fecha) = 2012
 GROUP BY p.prod_detalle, p.prod_codigo
 ORDER BY AVG(i.item_precio) DESC
 
 --Cantidad de depósitos en los cuales cada producto vendido tiene stock
-SELECT p.prod_codigo AS 'Códgio de producto',
+SELECT p.prod_codigo AS 'Código de producto',
 	   p.prod_detalle AS 'Detalle del producto',
 	   d.depo_codigo AS 'Código de depósito con stock para el producto',
 	   (SELECT COUNT(d1.depo_codigo) FROM Producto p1
@@ -428,11 +424,25 @@ Se deberán retornar todos los clientes ordenados por la cantidad de veces que co
 el último año.
 No se deberán visualizar NULLs en ninguna columna*/
 
+--La resolución final es:
 SELECT c.clie_codigo AS 'Código de cliente',
-       COUNT(DISTINCT f.fact_numero) AS 'Cantidad de veces que compró en el último año',
+       COUNT(DISTINCT (f.fact_numero + f.fact_sucursal + f.fact_tipo)) AS 'Cantidad de veces que compró en el último año', --OBS. 14 a
+	   ISNULL(AVG(ISNULL(f.fact_total, 0)), 0) AS 'Promedio por compra en el último año',
+	   COUNT(DISTINCT i.item_producto) AS 'Cantidad de productos diferentes comprados en el último año',
+	   ISNULL(MAX(f.fact_total), 0) AS 'Monto de la mayor compra que realizó en el último año'
+FROM Cliente c
+LEFT JOIN Factura f ON c.clie_codigo = f.fact_cliente
+LEFT JOIN Item_Factura i ON i.item_numero = f.fact_numero AND i.item_sucursal = f.fact_sucursal AND i.item_tipo = f.fact_tipo
+--WHERE YEAR(f.fact_fecha) = (SELECT MAX(YEAR(fact_fecha)) FROM Factura)
+GROUP BY c.clie_codigo
+ORDER BY [Cantidad de veces que compró en el último año] dESC
+
+--Esta fue una primera resolución:
+SELECT c.clie_codigo AS 'Código de cliente',
+       COUNT(DISTINCT (f.fact_numero + f.fact_sucursal + f.fact_tipo)) AS 'Cantidad de veces que compró en el último año', --OBS. 14 a
 	   AVG(ISNULL(f.fact_total, 0)) AS 'Promedio por compra en el último año',
 	   COUNT(i.item_producto) AS 'Cantidad de productos diferentes comprados en el último año',
-	   MAX(f.fact_total) AS 'Monto de la mayor compra que realizó en el último año'
+	  MAX(f.fact_total) AS 'Monto de la mayor compra que realizó en el último año'
 FROM Cliente c
 LEFT JOIN Factura f ON c.clie_codigo = f.fact_cliente
 LEFT JOIN Item_Factura i ON i.item_numero = f.fact_numero AND i.item_sucursal = f.fact_sucursal AND i.item_tipo = f.fact_tipo
@@ -453,7 +463,7 @@ ORDER BY 2 DESC
 
 --Esta había sido planteada como una solución inicial, aunque incompleta:
 SELECT c.clie_codigo AS 'Código de cliente',
-       COUNT(f.fact_numero) AS 'Cantidad de veces que compró en el último año',
+       COUNT(f.fact_numero) AS 'Cantidad de veces que compró en el último año', --OBS.14 b
 	   AVG(ISNULL(f.fact_total, 0)) AS 'Promedio por compra en el último año',
 	   (SELECT COUNT(DISTINCT i.item_producto)
 	   FROM Item_Factura i
@@ -465,6 +475,20 @@ LEFT JOIN Factura f ON c.clie_codigo = f.fact_cliente
 WHERE YEAR(f.fact_fecha) = (SELECT MAX(YEAR(fact_fecha)) FROM Factura)
 GROUP BY c.clie_codigo
 ORDER BY COUNT(f.fact_numero)
+
+/*OBS. 14 a: no se usa DISTINCT fact_numero, porque como Item_Factura multiplica la atomicidad, si un cliente compró en distintas sucursales, y el número de 
+factura coincidió, se perderán facturas. Ahora bien, si no se usa DISTINCT, por la atomicidad de Item_Factura, se contarán filas de más. Entonces se hace 
+teniendo en cuenta DISTINCT de la concatenación f.fact_numero + f.fact_sucursal + f.fact_tipo.*/
+
+/*Veamos lo que pasa si no se tiene Item_Factura.
+En este caso, no hace falta usar DISTINCT porque está agrupado por cliente, y sólo aparecerán las facturas de cada cliente una sola vez, es decir, no hay 
+mayor atomicidad que haga que el cálculo dé mal. Además, en el caso de que un cliente haya comprado en distintas sucursales, y se le haya hecho una factura 
+con el mismo número, al no usar DISTINCT se estarán contando dichas facturas:*/
+
+SELECT clie_razon_social, COUNT(fact_numero) AS 'Cantidad de facturas'
+FROM Cliente
+JOIN Factura ON clie_codigo = fact_cliente
+GROUP BY clie_razon_social
 
 /*Ejercicio 15: escriba una consulta que retorne los pares de productos que hayan sido vendidos juntos
 (en la misma factura) más de 500 veces. El resultado debe mostrar el código y
@@ -524,15 +548,50 @@ La composición es de 2 niveles, es decir, un producto compuesto solo se compone 
 productos no compuestos.
 Los clientes deben ser ordenados por código de provincia ascendente.*/
 
-/*
-SELECT c.clie_razon_social,
-       (SELECT SUM(CASE WHEN i.item_producto IN (SELECT comp_producto FROM Composicion) THEN (SELECT ) ELSE i.item_cantidad END) FROM Item_Factura i
-	   JOIN Factura f ON i.item_numero = f.fact_numero AND i.item_sucursal = f.fact_sucursal AND i.item_tipo = f.fact_tipo
-	   WHERE f.fact_cliente = c.clie_codigo AND YEAR(f.fact_fecha) = 2012) AS 'Cantidad de unidades totales vendidas en 2012 para este cliente',
-	   1 AS 'Código de producto con mayor venta en 2012'
-	   
-FROM Cliente c
-GROUP BY c.clie_codigo*/
+--Haciendo JOIN con Factura e Item_factura
+SELECT clie_razon_social AS 'Razón social',
+	   SUM(item_cantidad) AS 'Cantidad de unidades vendidas para el cliente',
+	   (SELECT TOP 1 item_producto
+	   FROM Item_Factura
+	   JOIN Factura ON item_numero = fact_numero AND item_sucursal = fact_sucursal AND item_tipo = fact_tipo
+	   WHERE fact_cliente = clie_codigo AND YEAR(fact_fecha) = 2012
+	   GROUP BY item_producto
+	   ORDER BY COUNT(item_cantidad) DESC, item_producto ASC) AS 'Producto con mayor venta en 2012 para el cliente' --Esto hace que se tenga que tener un subselect
+FROM Cliente
+JOIN Factura ON clie_codigo = fact_cliente
+JOIN Item_Factura ON fact_numero = item_numero AND fact_sucursal = item_sucursal AND fact_tipo = item_tipo
+WHERE YEAR(fact_fecha) = 2012
+GROUP BY clie_codigo, clie_razon_social
+HAVING (SELECT SUM(fact_total) FROM Factura WHERE fact_cliente = clie_codigo) < ((SELECT TOP 1 AVG(i.item_cantidad * i.item_precio) AS 'Promedio de ventas'
+					     FROM Item_Factura i
+                         JOIN Factura f ON i.item_numero = f.fact_numero AND i.item_sucursal = f.fact_sucursal AND i.item_tipo = f.fact_tipo
+                         WHERE YEAR(f.fact_fecha) = 2012
+                         GROUP BY i.item_producto
+                         ORDER BY SUM(item_cantidad) DESC, item_producto ASC) / 3)
+
+/*La consulta devuelve NULL en el último campo porque esos clientes no tuvieron compras en el año 2012. Esta consulta no es del todo buena porque se podría 
+haber resuetlo de una manera más fácil, evitando un subselect, como en el caso anterior.*/
+
+SELECT clie_razon_social AS 'Razón social',
+	   (SELECT SUM(item_cantidad)
+       FROM Factura
+	   JOIN Item_Factura ON fact_numero = item_numero AND fact_sucursal = item_sucursal AND fact_tipo = item_tipo
+	   WHERE fact_cliente = clie_codigo AND YEAR(fact_fecha) = 2012
+       ) AS 'Cantidad de unidades vendidas para el cliente',
+	   (SELECT TOP 1 item_producto
+	   FROM Item_Factura
+	   JOIN Factura ON item_numero = fact_numero AND item_sucursal = fact_sucursal AND item_tipo = fact_tipo
+	   WHERE fact_cliente = clie_codigo AND YEAR(fact_fecha) = 2012
+	   GROUP BY item_producto
+	   ORDER BY COUNT(item_cantidad) DESC, item_producto ASC) AS 'Producto con mayor venta en 2012 para el cliente'
+FROM Cliente
+GROUP BY clie_codigo, clie_razon_social
+HAVING (SELECT SUM(fact_total) FROM Factura WHERE fact_cliente = clie_codigo) < ((SELECT TOP 1 AVG(i.item_cantidad * i.item_precio) AS 'Promedio de vetnas'
+					     FROM Item_Factura i
+                         JOIN Factura f ON i.item_numero = f.fact_numero AND i.item_sucursal = f.fact_sucursal AND i.item_tipo = f.fact_tipo
+                         WHERE YEAR(f.fact_fecha) = 2012
+                         GROUP BY i.item_producto
+                         ORDER BY SUM(item_cantidad) DESC, item_producto ASC) / 3)
 
 
 /*Ejercicio 17: escriba una consulta que retorne una estadística de ventas por año y mes para cada
@@ -550,6 +609,25 @@ La consulta no puede mostrar NULL en ninguna de sus columnas y debe estar ordena
 por periodo y código de producto.
 */
 
+SELECT STR(YEAR(fact_fecha)) + '/' + LTRIM(STR(MONTH(fact_fecha))) AS 'PERIODO',
+	   prod_codigo AS 'PROD',
+	   prod_detalle AS 'DETALLE',
+	   SUM(item_cantidad) AS 'CANTIDAD_VENDIDA',
+	   (SELECT ISNULL(SUM(item_cantidad), 0)
+	   FROM Item_Factura
+	   JOIN Factura f1 ON item_numero = f1.fact_numero AND item_sucursal = f1.fact_sucursal AND item_tipo = f1.fact_tipo
+	   WHERE item_producto = prod_codigo AND
+			 YEAR(f1.fact_fecha) = YEAR(f.fact_fecha) - 1 AND
+			 MONTH(f1.fact_fecha) = CASE WHEN (MONTH(f.fact_fecha) - 1) = 0 THEN 12 ELSE MONTH(f.fact_fecha) - 1 END) AS 'VENTAS_AÑO_ANT',
+	   COUNT(DISTINCT (f.fact_numero + f.fact_sucursal + f.fact_tipo)) AS 'CANT_FACTURAS' --OBS. 17 
+FROM Producto
+JOIN Item_Factura ON prod_codigo = item_producto
+JOIN Factura f ON item_numero = f.fact_numero AND item_sucursal = f.fact_sucursal AND item_tipo = f.fact_tipo
+GROUP BY prod_codigo, prod_detalle, YEAR(f.fact_fecha), MONTH(f.fact_fecha)
+ORDER BY YEAR(f.fact_fecha), MONTH(f.fact_fecha), prod_codigo
+
+/*OBS. 17: misma observación que OBS. 14.*/
+
 /*Ejercicio 18: escriba una consulta que retorne una estadística de ventas para todos los rubros.
 La consulta debe retornar:
 DETALLE_RUBRO: Detalle del rubro
@@ -560,6 +638,71 @@ CLIENTE: Código del cliente que compro más productos del rubro en los últimos 30
 días
 La consulta no puede mostrar NULL en ninguna de sus columnas y debe estar ordenada
 por cantidad de productos diferentes vendidos del rubro.*/
+
+--Resolución final:
+SELECT rubr_detalle AS 'DETALLE_RUBRO',
+	   SUM(item_cantidad * item_precio) AS 'VENTAS',
+	   ISNULL((SELECT TOP 1 prod_codigo FROM Producto
+              JOIN Item_Factura ON prod_codigo = item_producto
+              WHERE prod_rubro = rubr_id
+              GROUP BY prod_codigo
+              ORDER BY SUM(item_cantidad) DESC), 'No existe') AS 'PROD1',
+	   ISNULL((SELECT TOP 1 prod_codigo FROM Producto
+              JOIN Item_Factura ON prod_codigo = item_producto
+              WHERE prod_rubro = rubr_id AND prod_codigo != (SELECT TOP 1 prod_codigo FROM Producto
+														     JOIN Item_Factura ON prod_codigo = item_producto
+            											     WHERE prod_rubro = rubr_id
+             											     GROUP BY prod_codigo
+             											     ORDER BY SUM(item_cantidad) DESC)
+           	  GROUP BY prod_codigo
+              ORDER BY SUM(item_cantidad) DESC), 'No existe') AS 'PROD2',
+	   ISNULL((SELECT TOP 1 fact_cliente
+	          FROM Factura
+              JOIN Item_Factura ON fact_numero = item_numero AND fact_sucursal = item_sucursal AND fact_tipo = item_tipo
+              JOIN Producto ON item_producto = prod_codigo
+              WHERE prod_rubro = rubr_id AND fact_fecha BETWEEN (SELECT MAX(fact_fecha) - 30 FROM Factura) AND (SELECT MAX(fact_fecha) FROM Factura)
+              GROUP BY fact_cliente
+              ORDER BY SUM(item_cantidad) DESC), 'No existe') AS 'CLIENTE'
+FROM Rubro
+JOIN Producto ON rubr_id = prod_rubro
+JOIN Item_Factura ON prod_codigo = item_producto
+GROUP BY rubr_detalle, rubr_id
+
+--Por más que no se muestre el rubr_id, debe agruparse por dicho campo para hacer el subselect
+SELECT rubr_detalle AS 'DETALLE_RUBRO',
+	   SUM(item_cantidad * item_precio) AS 'VENTAS',
+	   ISNULL((SELECT prod_codigo FROM (SELECT prod_codigo, ROW_NUMBER() OVER (ORDER BY SUM(item_cantidad) DESC) AS 'NroFila'
+	                                   FROM Producto
+	                                   JOIN Item_Factura ON prod_codigo = item_producto
+	                                   WHERE rubr_id = prod_rubro
+	                                   GROUP BY prod_codigo) AS Tabla
+	                                   WHERE NroFila = 1), 'No existe') AS 'PROD1',
+	   ISNULL((SELECT prod_codigo FROM (SELECT prod_codigo, ROW_NUMBER() OVER (ORDER BY SUM(item_cantidad) DESC) AS 'NroFila'
+	                                   FROM Producto
+	                                   JOIN Item_Factura ON prod_codigo = item_producto
+	                                   WHERE rubr_id = prod_rubro
+	                                   GROUP BY prod_codigo) AS Tabla
+	                                   WHERE NroFila = 2), 'No existe') AS 'PROD2',
+	   ISNULL((SELECT TOP 1 fact_cliente
+	          FROM Factura
+              JOIN Item_Factura ON fact_numero = item_numero AND fact_sucursal = item_sucursal AND fact_tipo = item_tipo
+              JOIN Producto ON item_producto = prod_codigo
+              WHERE prod_rubro = rubr_id AND fact_fecha BETWEEN (SELECT MAX(fact_fecha) - 30 FROM Factura) AND (SELECT MAX(fact_fecha) FROM Factura)
+              GROUP BY fact_cliente
+              ORDER BY SUM(item_cantidad) DESC), 'No existe') AS 'CLIENTE'
+FROM Rubro
+JOIN Producto ON rubr_id = prod_rubro
+JOIN Item_Factura ON prod_codigo = item_producto
+GROUP BY rubr_detalle, rubr_id
+
+--Cliente que compró más cantidad de productos de un rubro en los últimos 30 días
+SELECT TOP 1 fact_cliente
+FROM Factura
+JOIN Item_Factura ON fact_numero = item_numero AND fact_sucursal = item_sucursal AND fact_tipo = item_tipo
+JOIN Producto ON item_producto = prod_codigo
+WHERE prod_rubro = '0001' AND fact_fecha BETWEEN (SELECT MAX(fact_fecha) - 30 FROM Factura) AND (SELECT MAX(fact_fecha) FROM Factura)
+GROUP BY fact_cliente
+ORDER BY SUM(item_cantidad) DESC
 
 /*Ejercicio 19: en virtud de una recategorizacion de productos referida a la familia de los mismos se
 solicita que desarrolle una consulta sql que retorne para todos los productos:
@@ -594,17 +737,217 @@ a la sumatoria de los costos de cada uno de los items de dicha factura. Las colu
 - Facturas mal realizadas en ese año
 */
 
-/*Ejercicio 22:*/
-/*Ejercicio 23:*/
-/*Ejercicio 24:*/
-/*Ejercicio 25:*/
-/*Ejercicio 26:*/
-/*Ejercicio 27:*/
-/*Ejercicio 28:*/
-/*Ejercicio 29:*/
-/*Ejercicio 30:*/
-/*Ejercicio 31:*/
-/*Ejercicio 32:*/
-/*Ejercicio 33:*/
-/*Ejercicio 34:*/
-/*Ejercicio 35:*/
+/*Ejercicio 22: escriba una consulta sql que retorne una estadistica de venta para todos los rubros por
+trimestre contabilizando todos los años. Se mostraran como maximo 4 filas por rubro (1
+por cada trimestre).
+Se deben mostrar 4 columnas:
+- Detalle del rubro
+- Numero de trimestre del año (1 a 4)
+- Cantidad de facturas emitidas en el trimestre en las que se haya vendido al
+menos un producto del rubro
+- Cantidad de productos diferentes del rubro vendidos en el trimestre
+El resultado debe ser ordenado alfabeticamente por el detalle del rubro y dentro de cada
+rubro primero el trimestre en el que mas facturas se emitieron.
+No se deberan mostrar aquellos rubros y trimestres para los cuales las facturas emitiadas
+no superen las 100.
+En ningun momento se tendran en cuenta los productos compuestos para esta
+estadistica.*/
+
+/*Ejercicio 23: realizar una consulta SQL que para cada año muestre :
+- Año
+- El producto con composición más vendido para ese año.
+- Cantidad de productos que componen directamente al producto más vendido
+- La cantidad de facturas en las cuales aparece ese producto.
+- El código de cliente que más compro ese producto.
+- El porcentaje que representa la venta de ese producto respecto al total de venta
+del año.
+El resultado deberá ser ordenado por el total vendido por año en forma descendente.*/
+
+/*Ejercicio 24: escriba una consulta que considerando solamente las facturas correspondientes a los
+dos vendedores con mayores comisiones, retorne los productos con composición
+facturados al menos en cinco facturas,
+La consulta debe retornar las siguientes columnas:
+- Código de Producto
+- Nombre del Producto
+- Unidades facturadas
+El resultado deberá ser ordenado por las unidades facturadas descendente.*/
+
+/*Ejercicio 25: realizar una consulta SQL que para cada año y familia muestre :
+a. Año
+b. El código de la familia más vendida en ese año.
+c. Cantidad de Rubros que componen esa familia.
+d. Cantidad de productos que componen directamente al producto más vendido de
+esa familia.
+e. La cantidad de facturas en las cuales aparecen productos pertenecientes a esa
+familia.
+f. El código de cliente que más compro productos de esa familia.
+g. El porcentaje que representa la venta de esa familia respecto al total de venta
+del año.
+El resultado deberá ser ordenado por el total vendido por año y familia en forma
+descendente.*/
+
+/*Ejercicio 26: escriba una consulta sql que retorne un ranking de empleados devolviendo las
+siguientes columnas:
+- Empleado
+- Depósitos que tiene a cargo
+- Monto total facturado en el año corriente
+- Codigo de Cliente al que mas le vendió
+- Producto más vendido
+- Porcentaje de la venta de ese empleado sobre el total vendido ese año.
+Los datos deberan ser ordenados por venta del empleado de mayor a menor.*/
+
+/*Ejercicio 27: escriba una consulta sql que retorne una estadística basada en la facturacion por año y
+envase devolviendo las siguientes columnas:
+- Año
+- Codigo de envase
+- Detalle del envase
+- Cantidad de productos que tienen ese envase
+- Cantidad de productos facturados de ese envase
+- Producto mas vendido de ese envase
+- Monto total de venta de ese envase en ese año
+- Porcentaje de la venta de ese envase respecto al total vendido de ese año
+Los datos deberan ser ordenados por año y dentro del año por el envase con más
+facturación de mayor a menor.*/
+
+/*Ejercicio 28: Escriba una consulta sql que retorne una estadística por Año y Vendedor que retorne las
+siguientes columnas:
+- Año.
+- Codigo de Vendedor
+- Detalle del Vendedor
+- Cantidad de facturas que realizó en ese año
+- Cantidad de clientes a los cuales les vendió en ese año.
+- Cantidad de productos facturados con composición en ese año
+- Cantidad de productos facturados sin composicion en ese año.
+- Monto total vendido por ese vendedor en ese año
+Los datos deberan ser ordenados por año y dentro del año por el vendedor que haya
+vendido mas productos diferentes de mayor a menor.*/
+
+/*Ejercicio 29: se solicita que realice una estadística de venta por producto para el año 2011, solo para
+los productos que pertenezcan a las familias que tengan más de 20 productos asignados
+a ellas, la cual deberá devolver las siguientes columnas:
+a. Código de producto
+b. Descripción del producto
+c. Cantidad vendida
+d. Cantidad de facturas en la que esta ese producto
+e. Monto total facturado de ese producto
+Solo se deberá mostrar un producto por fila en función a los considerandos establecidos
+antes. El resultado deberá ser ordenado por el la cantidad vendida de mayor a menor.*/
+
+/*Ejercicio 30: se desea obtener una estadistica de ventas del año 2012, para los empleados que sean
+jefes, o sea, que tengan empleados a su cargo, para ello se requiere que realice la
+consulta que retorne las siguientes columnas:
+- Nombre del Jefe
+- Cantidad de empleados a cargo
+- Monto total vendido de los empleados a cargo
+- Cantidad de facturas realizadas por los empleados a cargo
+- Nombre del empleado con mejor ventas de ese jefe
+Debido a la perfomance requerida, solo se permite el uso de una subconsulta si fuese
+necesario.
+Los datos deberan ser ordenados por de mayor a menor por el Total vendido y solo se
+deben mostrarse los jefes cuyos subordinados hayan realizado más de 10 facturas.*/
+
+/*Ejercicio 31: escriba una consulta sql que retorne una estadística por Año y Vendedor que retorne las
+siguientes columnas:
+- Año.
+- Codigo de Vendedor
+- Detalle del Vendedor
+- Cantidad de facturas que realizó en ese año
+- Cantidad de clientes a los cuales les vendió en ese año.
+- Cantidad de productos facturados con composición en ese año
+- Cantidad de productos facturados sin composicion en ese año.
+- Monto total vendido por ese vendedor en ese año
+Los datos deberan ser ordenados por año y dentro del año por el vendedor que haya
+vendido mas productos diferentes de mayor a menor.*/
+
+/*Ejercicio 32: Se desea conocer las familias que sus productos se facturaron juntos en las mismas
+facturas para ello se solicita que escriba una consulta sql que retorne los pares de
+familias que tienen productos que se facturaron juntos. Para ellos deberá devolver las
+siguientes columnas:
+- Código de familia
+- Detalle de familia
+- Código de familia
+- Detalle de familia
+- Cantidad de facturas
+- Total vendido
+Los datos deberan ser ordenados por Total vendido y solo se deben mostrar las familias
+que se vendieron juntas más de 10 veces.*/
+
+/*Ejercicio 33: se requiere obtener una estadística de venta de productos que sean componentes. Para
+ello se solicita que realiza la siguiente consulta que retorne la venta de los
+componentes del producto más vendido del año 2012. Se deberá mostrar:
+a. Código de producto
+b. Nombre del producto
+c. Cantidad de unidades vendidas
+d. Cantidad de facturas en la cual se facturo
+e. Precio promedio facturado de ese producto.
+f. Total facturado para ese producto
+*/
+
+SELECT prod_codigo AS 'Código de producto',
+       prod_detalle AS 'Nombre del producto',
+	   SUM(item_cantidad) AS 'Cantidad de unidades vendidas',
+	   COUNT(DISTINCT (fact_numero + fact_sucursal + fact_tipo)) AS 'Cantidad de facturas en las cuales se facturó',
+	   AVG(item_precio) AS 'Precio promedio facturado',
+	   SUM(item_precio * item_cantidad) AS 'Total facturado'
+FROM Producto
+JOIN Item_Factura ON prod_codigo = item_producto
+JOIN Factura ON item_numero = fact_numero AND item_sucursal = fact_sucursal AND item_tipo = fact_tipo
+WHERE prod_codigo IN (SELECT comp_componente
+				     FROM Composicion
+					 WHERE comp_producto = (SELECT TOP 1 item_producto
+					                        FROM Item_Factura
+											JOIN Factura ON
+											item_numero = fact_numero AND
+											item_sucursal = fact_sucursal AND
+											item_tipo = fact_tipo
+                                            JOIN Composicion ON
+   				                            item_producto = comp_producto
+											WHERE YEAR(fact_fecha) = 2012
+											GROUP BY item_producto
+										    ORDER BY SUM(item_cantidad)))
+GROUP BY prod_codigo, prod_detalle
+
+--Otra forma de hacerlo:
+SELECT prod_codigo AS 'Código de producto',
+       prod_detalle AS 'Nombre del producto',
+	   SUM(item_cantidad) AS 'Cantidad de unidades vendidas',
+	   COUNT(DISTINCT (fact_numero + fact_sucursal + fact_tipo)) AS 'Cantidad de facturas en las cuales se facturó',
+	   AVG(item_precio) AS 'Precio promedio facturado',
+	   SUM(item_precio * item_cantidad) AS 'Total facturado'
+FROM Producto
+JOIN Item_Factura ON prod_codigo = item_producto
+JOIN Factura ON item_numero = fact_numero AND item_sucursal = fact_sucursal AND item_tipo = fact_tipo
+JOIN Composicion ON prod_codigo = comp_componente
+WHERE comp_producto = (SELECT TOP 1 item_producto
+					                        FROM Item_Factura
+											JOIN Factura ON
+											item_numero = fact_numero AND
+											item_sucursal = fact_sucursal AND
+											item_tipo = fact_tipo
+                                            JOIN Composicion ON
+   				                            item_producto = comp_producto
+											WHERE YEAR(fact_fecha) = 2012
+											GROUP BY item_producto
+										    ORDER BY SUM(item_cantidad))
+GROUP BY prod_codigo, prod_detalle
+
+/*Ejercicio 34: escriba una consulta sql que retorne para todos los rubros la cantidad de facturas mal
+facturadas por cada mes del año 2011 Se considera que una factura es incorrecta cuando
+en la misma factura se factutan productos de dos rubros diferentes. Si no hay facturas
+mal hechas se debe retornar 0. Las columnas que se deben mostrar son:
+1- Codigo de Rubro
+2- Mes
+3- Cantidad de facturas mal realizadas.*/
+
+/*Ejercicio 35: se requiere realizar una estadística de ventas por año y producto, para ello se solicita
+que escriba una consulta sql que retorne las siguientes columnas:
+- Año
+- Codigo de producto
+- Detalle del producto
+- Cantidad de facturas emitidas a ese producto ese año
+- Cantidad de vendedores diferentes que compraron ese producto ese año.
+- Cantidad de productos a los cuales compone ese producto, si no compone a ninguno
+se debera retornar 0.
+- Porcentaje de la venta de ese producto respecto a la venta total de ese año.
+Los datos deberan ser ordenados por año y por producto con mayor cantidad vendida.*/
+
