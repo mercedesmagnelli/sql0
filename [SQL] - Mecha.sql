@@ -797,7 +797,6 @@ HAVING F.fact_total - f.fact_total_impuestos - sum(it.item_cantidad * it.item_pr
 
 
 
-
 /*
 Escriba una consulta sql que retorne una estadistica de venta para todos los rubros por
 trimestre contabilizando todos los años. Se mostraran como maximo 4 filas por rubro (1
@@ -828,13 +827,40 @@ SELECT
 		WHEN MONTH(f.fact_fecha) > 6 and MONTH(f.fact_fecha) <= 9 THEN '3'
 		WHEN MONTH(f.fact_fecha) > 9 and MONTH(f.fact_fecha) <= 12 THEN '4'
 	END	as [NUMERO DE TRIMESTRE], 
-	'1' as [CANTIDAD DE FACTURAS EMITIDAS EN TRIMESTRE], 
-	'2' as [CANTIDAD DE PRODS DIFERRENTES
+	count (distinct f.fact_numero + f.fact_tipo + f.fact_sucursal ) as [CANTIDAD DE FACTURAS EMITIDAS EN TRIMESTRE], 
+	count(distinct prod_codigo)  as [CANTIDAD DE PRODS DIFERENTES]
 FROM  
 	Rubro r left join Producto p on p.prod_rubro =  r.rubr_id
-	LEFT JOIN Item_Factura it on it.item_producto = p.prod_codigo
-	LEFT JOIN Factura f on f.fact_numero = it.item_numero
-GROUP BY r.rubr_detalle, MONTH(f.fact_fecha)
+	left JOIN Item_Factura it on it.item_producto = p.prod_codigo
+	LEFT JOIN Factura f on f.fact_numero + f.fact_tipo + f.fact_sucursal = it.item_numero + it.item_tipo + it.item_sucursal
+GROUP BY r.rubr_detalle, CASE 
+		WHEN MONTH(f.fact_fecha) >= 1 and MONTH(f.fact_fecha) <= 3 THEN '1'
+		WHEN MONTH(f.fact_fecha) > 3 and MONTH(f.fact_fecha) <= 6 THEN '2'
+		WHEN MONTH(f.fact_fecha) > 6 and MONTH(f.fact_fecha) <= 9 THEN '3'
+		WHEN MONTH(f.fact_fecha) > 9 and MONTH(f.fact_fecha) <= 12 THEN '4'
+	END	
+
+order by 1,2
+
+--- estoy bastante segura de que es asì (mas o menos) pero el tema es que hay productos que estan en facturas sin fechas, como por ejemplo
+
+SELECT 
+	*
+FROM  
+	Rubro r left join Producto p on p.prod_rubro =  r.rubr_id
+	left JOIN Item_Factura it on it.item_producto = p.prod_codigo
+	LEFT JOIN Factura f on f.fact_numero + f.fact_tipo + f.fact_sucursal = it.item_numero + it.item_tipo + it.item_sucursal
+where r.rubr_detalle = 'FOSFOROS Y ENCENDEDORES'
 
 
-select * from Rubro  -- son 31 -> 31 * 4 -> 124
+
+select * from Rubro  -- son 31 -> 31 * 4 -> 124 (como minimo, hay algunos que tienen )
+
+
+SELECT 
+	*
+FROM  
+	Rubro r left join Producto p on p.prod_rubro =  r.rubr_id
+	left JOIN Item_Factura it on it.item_producto = p.prod_codigo
+	LEFT JOIN Factura f on f.fact_numero + f.fact_tipo + f.fact_sucursal = it.item_numero + it.item_tipo + it.item_sucursal
+where r.rubr_detalle = 'FOSFOROS Y ENCENDEDORES'
