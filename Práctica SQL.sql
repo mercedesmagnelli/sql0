@@ -433,16 +433,16 @@ SELECT c.clie_codigo AS 'Código de cliente',
 FROM Cliente c
 LEFT JOIN Factura f ON c.clie_codigo = f.fact_cliente
 LEFT JOIN Item_Factura i ON i.item_numero = f.fact_numero AND i.item_sucursal = f.fact_sucursal AND i.item_tipo = f.fact_tipo
---WHERE YEAR(f.fact_fecha) = (SELECT MAX(YEAR(fact_fecha)) FROM Factura)
+WHERE YEAR(f.fact_fecha) = (SELECT MAX(YEAR(fact_fecha)) FROM Factura) OR YEAR(f.fact_fecha) IS NULL
 GROUP BY c.clie_codigo
-ORDER BY [Cantidad de veces que compró en el último año] dESC
+ORDER BY 2 DESC
 
 --Esta fue una primera resolución:
 SELECT c.clie_codigo AS 'Código de cliente',
        COUNT(DISTINCT (f.fact_numero + f.fact_sucursal + f.fact_tipo)) AS 'Cantidad de veces que compró en el último año', --OBS. 14 a
 	   AVG(ISNULL(f.fact_total, 0)) AS 'Promedio por compra en el último año',
-	   COUNT(i.item_producto) AS 'Cantidad de productos diferentes comprados en el último año',
-	  MAX(f.fact_total) AS 'Monto de la mayor compra que realizó en el último año'
+	   COUNT(DISTINCT i.item_producto) AS 'Cantidad de productos diferentes comprados en el último año',
+	   MAX(f.fact_total) AS 'Monto de la mayor compra que realizó en el último año'
 FROM Cliente c
 LEFT JOIN Factura f ON c.clie_codigo = f.fact_cliente
 LEFT JOIN Item_Factura i ON i.item_numero = f.fact_numero AND i.item_sucursal = f.fact_sucursal AND i.item_tipo = f.fact_tipo
@@ -712,12 +712,22 @@ solicita que desarrolle una consulta sql que retorne para todos los productos:
 - Detalle de la familia actual del producto
 - Codigo de la familia sugerido para el producto
 - Detalla de la familia sugerido para el producto
-La familia sugerida para un producto es la que poseen la mayoria de los productos cuyo
-detalle coinciden en los primeros 5 caracteres.
+La familia sugerida para un producto es la que poseen la mayoria de los productos cuyos
+detalles coinciden en los primeros 5 caracteres.
 En caso que 2 o mas familias pudieran ser sugeridas se debera seleccionar la de menor
 codigo. Solo se deben mostrar los productos para los cuales la familia actual sea
 diferente a la sugerida
 Los resultados deben ser ordenados por detalle de producto de manera ascendente*/
+
+SELECT prod_codigo AS 'Código del producto',
+	   prod_detalle AS 'Detalle del producto', 
+	   prod_familia AS 'Código de la familia actual',
+	   fami_detalle AS 'Detalle de la familia actual',
+	   1 AS 'Código de la familia sugerida',
+	   2 AS 'Detalle de la familia sugerida'
+FROM Producto
+JOIN Familia ON prod_familia = fami_id
+ORDER BY prod_detalle ASC
 
 /*Ejercicio 20: escriba una consulta sql que retorne un ranking de los mejores 3 empleados del 2012
 Se debera retornar legajo, nombre y apellido, anio de ingreso, puntaje 2011, puntaje
@@ -727,15 +737,44 @@ que superen los 100 pesos que haya vendido en el año, para los que tengan menos 
 facturas en el año el calculo del puntaje sera el 50% de cantidad de facturas realizadas
 por sus subordinados directos en dicho año.*/
 
+SELECT TOP 3 e.empl_codigo,
+       e.empl_nombre,
+	   e.empl_apellido,
+	   YEAR(e.empl_ingreso) AS 'Año de ingreso' ,
+	   (CASE WHEN COUNT(*) >= 50 THEN (SELECT COUNT(*) FROM Factura WHERE fact_vendedor = e.empl_codigo AND fact_total > 100 AND YEAR(fact_fecha) = 2011)
+			 ELSE 0.5 * (SELECT COUNT(*) FROM Factura
+			             WHERE fact_vendedor IN (SELECT e1.empl_codigo FROM Empleado e1 WHERE e1.empl_jefe = e.empl_codigo)
+						 AND YEAR(fact_fecha) = 2011)
+		END) AS 'Puntaje 2011',
+	    (CASE WHEN COUNT(*) >= 50 THEN (SELECT COUNT(*) FROM Factura WHERE fact_vendedor = e.empl_codigo AND fact_total > 100 AND YEAR(fact_fecha) = 2012)
+			 ELSE 0.5 * (SELECT COUNT(*) FROM Factura
+			             WHERE fact_vendedor IN (SELECT e1.empl_codigo FROM Empleado e1 WHERE e1.empl_jefe = e.empl_codigo)
+						 AND YEAR(fact_fecha) = 2012)
+		END) AS 'Puntaje 2012'
+FROM Empleado e
+JOIN Factura ON e.empl_codigo = fact_vendedor
+GROUP BY e.empl_codigo, e.empl_nombre, e.empl_apellido, YEAR(e.empl_ingreso)
+ORDER BY 5 DESC
+
 /*Ejercicio 21: escriba una consulta sql que retorne para todos los años, en los cuales se haya hecho al
 menos una factura, la cantidad de clientes a los que se les facturo de manera incorrecta al menos una factura
-y que cantidad de facturas se realizaron de manera incorrecta. Seconsidera que una factura es incorrecta cuando
+y que cantidad de facturas se realizaron de manera incorrecta. Se considera que una factura es incorrecta cuando
 la diferencia entre el total de la factura menos el total de impuesto tiene una diferencia mayor a $ 1 respecto
 a la sumatoria de los costos de cada uno de los items de dicha factura. Las columnas que se deben mostrar son:
 - Año
 - Clientes a los que se les facturo mal en ese año
 - Facturas mal realizadas en ese año
 */
+
+SELECT YEAR(fact_fecha) AS 'Año',
+       COUNT(DISTINCT fact_cliente) AS 'Cantidad de clientes con facturas incorrectas',
+	   COUNT(fact_numero+fact_sucursal+fact_tipo) AS 'Cantidad de facturas incorrectas'
+FROM Factura 
+WHERE (fact_total - fact_total_impuestos) - (SELECT SUM(item_cantidad * item_precio)
+                                            FROM Item_Factura WHERE item_numero = fact_numero
+											AND item_sucursal = fact_sucursal
+											AND item_tipo = fact_tipo) > 1
+GROUP BY YEAR(fact_fecha)
 
 /*Ejercicio 22: escriba una consulta sql que retorne una estadistica de venta para todos los rubros por
 trimestre contabilizando todos los años. Se mostraran como maximo 4 filas por rubro (1
@@ -753,6 +792,27 @@ no superen las 100.
 En ningun momento se tendran en cuenta los productos compuestos para esta
 estadistica.*/
 
+SELECT rubr_detalle AS 'Detalle del rubro',
+	   CASE WHEN MONTH(fact_fecha) BETWEEN 1 AND 3 THEN 1
+	        WHEN MONTH(fact_fecha) BETWEEN 4 AND 6 THEN 2
+		    WHEN MONTH(fact_fecha) BETWEEN 7 AND 9 THEN 3
+			WHEN MONTH(fact_fecha) BETWEEN 10 AND 12 THEN 4
+	   END AS 'Trimestre',
+	   COUNT(DISTINCT fact_numero + fact_sucursal + fact_tipo) AS 'Cantidad de facturas emitidas',
+	   COUNT(DISTINCT prod_codigo) AS 'Cantidad de productos diferentes vendidos'
+FROM Rubro
+JOIN Producto ON rubr_id = prod_rubro
+LEFT JOIN Item_Factura ON prod_codigo = item_producto
+JOIN Factura ON item_numero = fact_numero AND item_sucursal = fact_sucursal AND item_tipo = fact_tipo
+WHERE prod_codigo NOT IN (SELECT DISTINCT comp_producto FROM Composicion)
+GROUP BY rubr_detalle,
+         (CASE WHEN MONTH(fact_fecha) BETWEEN 1 AND 3 THEN 1
+	     WHEN MONTH(fact_fecha) BETWEEN 4 AND 6 THEN 2
+		 WHEN MONTH(fact_fecha) BETWEEN 7 AND 9 THEN 3
+		 WHEN MONTH(fact_fecha) BETWEEN 10 AND 12 THEN 4 END)
+HAVING COUNT(DISTINCT fact_numero + fact_sucursal + fact_tipo) >= 100
+ORDER BY 1 ASC, 3 DESC
+
 /*Ejercicio 23: realizar una consulta SQL que para cada año muestre :
 - Año
 - El producto con composición más vendido para ese año.
@@ -763,6 +823,38 @@ estadistica.*/
 del año.
 El resultado deberá ser ordenado por el total vendido por año en forma descendente.*/
 
+SELECT YEAR(fact_fecha) AS 'Año',
+       comp_producto AS 'Producto con composición más vendido',
+	   COUNT(DISTINCT comp_componente) AS 'Cantidad de productos que componen al producto directamente',
+	   COUNT(DISTINCT fact_numero+fact_sucursal+fact_tipo) AS 'Cantidad de facturas en las cuales aparece el producto',
+	   (SELECT TOP 1 fact_cliente FROM Factura f1
+       JOIN Item_Factura ON f1.fact_numero = item_numero AND f1.fact_sucursal = item_sucursal AND f1.fact_tipo = item_tipo
+       WHERE YEAR(f1.fact_fecha) = YEAR(f.fact_fecha) AND item_producto = comp_producto
+       GROUP BY fact_cliente
+       ORDER BY COUNT(DISTINCT f1.fact_numero+f1.fact_sucursal+f1.fact_tipo) DESC) AS 'Código de cliente que más compró el producto',
+	   SUM(item_cantidad * item_precio) * 100 / (SELECT SUM(fact_total)
+	                                            FROM Factura f1
+												WHERE YEAR(f1.fact_fecha) = YEAR(f.fact_fecha)) AS 'Porcentaje de venta del producto respecto de las ventas del año'
+FROM Factura f
+JOIN Item_Factura on f.fact_numero = item_numero AND f.fact_sucursal = item_sucursal AND f.fact_tipo = item_tipo
+JOIN Composicion ON item_producto = comp_producto
+WHERE comp_producto = (SELECT TOP 1 item_producto
+                      FROM Item_Factura
+					  JOIN Factura f1 ON item_numero = f1.fact_numero AND item_sucursal = f1.fact_sucursal AND item_tipo = f1.fact_tipo
+                      WHERE YEAR(f1.fact_fecha) = YEAR(f.fact_fecha) AND item_producto IN (SELECT comp_producto FROM Composicion)
+					  GROUP BY item_producto
+					  ORDER BY COUNT(item_numero+item_sucursal+item_tipo))
+GROUP BY YEAR(fact_fecha), comp_producto
+ORDER BY (SELECT SUM(fact_total) FROM Factura f1 WHERE YEAR(f1.fact_fecha) = YEAR(f.fact_fecha))
+
+--Cantidad de veces que fue vendido un producto en un año
+SELECT TOP 1 comp_producto AS 'Código de producto', COUNT(item_numero+item_sucursal+item_tipo) AS 'Cantidad de veces vendido' FROM Composicion
+JOIN Item_Factura ON comp_producto = item_producto
+JOIN Factura ON item_numero = fact_numero AND item_sucursal = fact_sucursal AND item_tipo = fact_tipo
+WHERE YEAR(fact_fecha) = 2012
+GROUP BY YEAR(fact_fecha), comp_producto
+ORDER BY COUNT(item_numero+item_sucursal+item_tipo) DESC
+
 /*Ejercicio 24: escriba una consulta que considerando solamente las facturas correspondientes a los
 dos vendedores con mayores comisiones, retorne los productos con composición
 facturados al menos en cinco facturas,
@@ -771,6 +863,18 @@ La consulta debe retornar las siguientes columnas:
 - Nombre del Producto
 - Unidades facturadas
 El resultado deberá ser ordenado por las unidades facturadas descendente.*/
+
+SELECT prod_codigo AS 'Código del producto',
+       prod_detalle AS 'Nombre del producto',
+	   SUM(item_cantidad) AS 'Unidades facturadas'
+FROM Producto
+JOIN Item_Factura ON prod_codigo = item_producto
+JOIN Factura ON item_numero = fact_numero AND item_sucursal = fact_sucursal AND item_tipo = fact_tipo
+WHERE fact_vendedor IN (SELECT TOP 2 empl_codigo FROM Empleado ORDER BY empl_comision DESC) AND prod_codigo IN (SELECT comp_producto FROM Composicion)
+GROUP BY prod_codigo, prod_detalle
+HAVING COUNT(DISTINCT fact_numero+fact_sucursal+fact_tipo) >= 5
+ORDER BY 3 DESC
+
 
 /*Ejercicio 25: realizar una consulta SQL que para cada año y familia muestre :
 a. Año
@@ -786,6 +890,43 @@ del año.
 El resultado deberá ser ordenado por el total vendido por año y familia en forma
 descendente.*/
 
+SELECT YEAR(fact_fecha) AS 'Año',
+       fami_id AS 'Código de familia más vendida',
+	   COUNT(DISTINCT prod_rubro) AS 'Cantidad de rubros que componen la familia',
+	   (SELECT COUNT(comp_componente)
+       FROM Composicion
+       WHERE comp_producto = (SELECT TOP 1 item_producto 
+	                         FROM Item_Factura
+                             JOIN Factura f1 ON item_numero = fact_numero AND item_sucursal = fact_sucursal AND item_tipo = fact_tipo
+                             WHERE YEAR(f1.fact_fecha) = YEAR(f.fact_fecha)
+                             GROUP BY item_producto
+                             ORDER BY SUM(item_cantidad) DESC)) AS 'Cantidad de productos que componen al producto más vendido de esa familia',
+	   COUNT(DISTINCT fact_numero+fact_sucursal+fact_tipo) AS 'Cantidad de facturas con productos de la familia',
+	   (SELECT TOP 1 fact_cliente
+       FROM Factura
+       JOIN Item_Factura ON fact_numero = item_numero AND fact_sucursal = item_sucursal AND fact_tipo = item_tipo
+       JOIN Producto ON item_producto = prod_codigo AND prod_familia = fami_id
+       WHERE YEAR(fact_fecha) = YEAR(f.fact_fecha)
+       GROUP BY fact_cliente
+       ORDER BY SUM(item_cantidad) DESC) AS 'Código de cliente que más productos compró de la familia',
+	   SUM(item_cantidad * item_precio) * 100 / (SELECT SUM(f1.fact_total)
+	                                            FROM Factura f1
+                                                WHERE YEAR(f1.fact_fecha) = YEAR(f.fact_fecha)) AS 'Porcentaje de venta de la familia respecto a las ventas del año'
+FROM Familia
+JOIN Producto ON fami_id = prod_familia
+JOIN Item_Factura ON prod_codigo = item_producto
+JOIN Factura f ON item_numero = f.fact_numero AND item_sucursal = f.fact_sucursal AND item_tipo = f.fact_tipo
+WHERE fami_id = (SELECT TOP 1 fam.fami_id
+                FROM Familia fam
+				JOIN Producto ON fam.fami_id = prod_familia
+				JOIN Item_Factura ON prod_codigo = item_producto
+				JOIN Factura fac ON item_numero = fac.fact_numero AND item_sucursal = fac.fact_sucursal AND item_tipo = fac.fact_tipo
+				WHERE YEAR(fac.fact_fecha) = YEAR(f.fact_fecha)
+				GROUP BY fam.fami_id
+				ORDER BY SUM(item_cantidad) DESC)
+GROUP BY YEAR(f.fact_fecha), fami_id
+ORDER BY 1, 2 --me dio paja, recien me di cuenta ah
+
 /*Ejercicio 26: escriba una consulta sql que retorne un ranking de empleados devolviendo las
 siguientes columnas:
 - Empleado
@@ -795,6 +936,33 @@ siguientes columnas:
 - Producto más vendido
 - Porcentaje de la venta de ese empleado sobre el total vendido ese año.
 Los datos deberan ser ordenados por venta del empleado de mayor a menor.*/
+
+--Se considera un ranking en un año específico
+SELECT empl_codigo AS 'Código de empleado',
+	   (SELECT COUNT(*) FROM DEPOSITO WHERE depo_encargado = empl_codigo) AS 'Depósitos a cargo',
+	   SUM(ISNULL(fact_total, 0)) AS 'Monto total facturado en el año corriente',
+	   (SELECT TOP 1 fact_cliente
+	   FROM Factura f1
+	   WHERE f1.fact_vendedor = empl_codigo
+	   GROUP BY fact_cliente
+	   ORDER BY SUM(fact_total) DESC) AS 'Código de cliente al que más le vendió',
+	   (SELECT TOP 1 item_producto
+       FROM Item_Factura
+       JOIN Factura f1 ON item_numero = f1.fact_numero AND item_sucursal = f1.fact_sucursal AND item_tipo = f1.fact_tipo
+       WHERE f1.fact_vendedor = empl_codigo
+       GROUP BY item_producto
+       ORDER BY SUM(item_cantidad) DESC) AS 'Producto más vendido',
+	   (SELECT ISNULL(SUM(f1.fact_total), 0)
+	   FROM Factura f1
+	   WHERE f1.fact_vendedor = empl_codigo) * 100 /
+	   (SELECT SUM(fact_total)
+	   FROM Factura
+	   WHERE YEAR(fact_fecha) = YEAR(GETDATE()) /*2010*/) AS 'Porcentaje de la venta sobre el total vendido del año'
+FROM Empleado
+LEFT JOIN Factura f ON empl_codigo = f.fact_vendedor
+WHERE YEAR(f.fact_fecha) = YEAR(GETDATE()) --2010
+GROUP BY empl_codigo
+ORDER BY (SELECT SUM(f1.fact_total) FROM Factura f1 WHERE f1.fact_vendedor = empl_codigo) DESC
 
 /*Ejercicio 27: escriba una consulta sql que retorne una estadística basada en la facturacion por año y
 envase devolviendo las siguientes columnas:
