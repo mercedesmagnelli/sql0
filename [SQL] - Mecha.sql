@@ -861,3 +861,9 @@ FROM
 	left JOIN Item_Factura it on it.item_producto = p.prod_codigo
 	LEFT JOIN Factura f on f.fact_numero + f.fact_tipo + f.fact_sucursal = it.item_numero + it.item_tipo + it.item_sucursal
 where r.rubr_detalle = 'FOSFOROS Y ENCENDEDORES'
+
+
+
+
+
+

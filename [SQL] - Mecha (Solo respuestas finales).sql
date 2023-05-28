@@ -558,8 +558,6 @@ estadistica.
 
 
 
-
-
 SELECT 
 	r.rubr_detalle as [DETALLE DEL RUBRO], 
 	CASE 
