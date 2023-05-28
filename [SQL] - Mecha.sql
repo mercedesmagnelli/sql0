@@ -3,12 +3,6 @@
 igual a $ 1000 ordenado por código de cliente.
 */
 
-
-
-
-
-
-
 SELECT 
 	clie_codigo, 
 	clie_razon_social
@@ -554,6 +548,7 @@ where comp_producto = '00001104'
 
 
 /*
+EJERCICIO 14:
 
 Escriba una consulta que retorne una estadística de ventas por cliente. Los campos que
 debe retornar son:
@@ -568,21 +563,34 @@ No se deberán visualizar NULLs en ninguna columna
 
 */
 
+
+
+SELECT c.clie_codigo AS 'Código de cliente',
+       COUNT(DISTINCT (f.fact_numero + f.fact_sucursal + f.fact_tipo)) AS 'Cantidad de veces que compró en el último año', --OBS. 14 a
+       ISNULL(AVG(ISNULL(f.fact_total, 0)), 0) AS 'Promedio por compra en el último año',
+       COUNT(DISTINCT i.item_producto) AS 'Cantidad de productos diferentes comprados en el último año',
+       ISNULL(MAX(f.fact_total), 0) AS 'Monto de la mayor compra que realizó en el último año'
+FROM Cliente c
+LEFT JOIN Factura f ON c.clie_codigo = f.fact_cliente
+LEFT JOIN Item_Factura i ON i.item_numero = f.fact_numero AND i.item_sucursal = f.fact_sucursal AND i.item_tipo = f.fact_tipo
+WHERE YEAR(f.fact_fecha) = (SELECT MAX(YEAR(fact_fecha)) FROM Factura)
+GROUP BY c.clie_codigo
+ORDER BY [Cantidad de veces que compró en el último año] dESC
+
+
+
+
 SELECT 
 	 c.clie_codigo				AS [CODIGO CLIENTE], 
-	 count(distinct F.fact_tipo + F.fact_sucursal + fact_numero) as [CANTIDAD DE VECES QUE COMPRO], 
+	 COUNT(distinct F.fact_tipo + F.fact_sucursal + fact_numero) as [CANTIDAD DE VECES QUE COMPRO], 
 	 AVG(F.fact_total)			as [PROMEDIO DE COMPRA], 
 		 (
-			SELECT 
-				count(distinct it.item_producto)
-				FROM 
-					Item_Factura it join Factura f1 on  F1.fact_tipo + F1.fact_sucursal + f1.fact_numero =  it.item_tipo + it.item_sucursal + it.item_numero
-				where f1.fact_cliente = c.clie_codigo and YEAR(f1.fact_fecha) = (select year(max(f3.fact_fecha)) from Factura f3)
-				GROUP BY f1.fact_cliente 
+			
 		 )						as [CANTIDAD DE PRODUCTOS DIFERENTES], 
 	 MAX(fact_total)			as [MONTO DE LA MAYOR COMPRA]
 FROM 
 	Cliente c left join Factura F ON F.fact_cliente = c.clie_codigo
+	JOIN Item_Factura it on F.fact_tipo + F.fact_sucursal + f.fact_numero =  it.item_tipo + it.item_sucursal + it.item_numero
 WHERE 
 	YEAR(f.fact_fecha) = (select year(max(f2.fact_fecha)) from Factura f2)
 GROUP BY 
@@ -665,4 +673,298 @@ mostrar solamente el de menor código) para ese cliente.
 Aclaraciones:
 La composición es de 2 niveles, es decir, un producto compuesto solo se compone de
 productos no compuestos.
-Los clientes deben ser ordenados por código de provincia ascendente.*/SELECT*FROM Item_Factura it 
+Los clientes deben ser ordenados por código de provincia ascendente.
+*/
+
+
+SELECT
+*
+FROM Item_Factura it 
+
+
+/*
+	EJERCICIO 18. Escriba una consulta que retorne una estadística de ventas para todos los rubros.
+	La consulta debe retornar:
+	DETALLE_RUBRO: Detalle del rubro
+	VENTAS: Suma de las ventas en pesos de productos vendidos de dicho rubro
+	PROD1: Código del producto más vendido de dicho rubro
+	PROD2: Código del segundo producto más vendido de dicho rubro
+	CLIENTE: Código del cliente que compro más productos del rubro en los últimos 30
+	días
+	La consulta no puede mostrar NULL en ninguna de sus columnas y debe estar ordenada
+	por cantidad de productos diferentes vendidos del rubro.
+*/
+
+
+SELECT 
+	 r.rubr_detalle as [DETALLE DEL RUBRO], 
+	 1 as [VENTAS DEL RUBRO], 
+	 2 as [VENTAS DEL PRODUCTO MÁS VENDIDO], 
+	 3 as [VENTAS DEL SEGUNDO PRODUCTO MÁS VENDIDO], 
+	 4 as [CLIENTE QUE MÁS COMPRO EN EL RUBRO]
+FROM 
+	RUBRO r 
+
+
+
+
+---- mati ---
+
+SELECT
+    ROW_NUMBER() OVER (PARTITION BY prod_familia ORDER BY prod_codigo) AS 'Numeración',
+    p.prod_familia,
+    p.prod_codigo,
+    p.prod_detalle
+FROM Producto p
+where  ROW_NUMBER() OVER (PARTITION BY prod_familia ORDER BY prod_codigo)  <= 2
+
+
+SELECT prod_codigo, 
+		prod_rubro,
+		 SUM(item_cantidad)
+       FROM Producto
+       JOIN Item_Factura ON prod_codigo = item_producto
+       WHERE prod_rubro = '0001'
+       GROUP BY prod_rubro, prod_codigo
+       HAVING (SELECT ROW_NUMBER() OVER (PARTITION BY prod_codigo ORDER BY SUM(item_cantidad) DESC)) = 1
+
+
+SELECT rubr_detalle AS 'DETALLE_RUBRO',
+       SUM(item_cantidad * item_precio) AS 'VENTAS',
+       (SELECT prod_codigo
+       FROM Producto
+       JOIN Item_Factura ON prod_codigo = item_producto
+       WHERE prod_rubro = rubr_id
+       GROUP BY prod_rubro, prod_codigo
+       HAVING (SELECT ROW_NUMBER() OVER (ORDER BY SUM(item_cantidad) DESC)) = 1) AS 'PROD1',
+       3 AS 'PROD2',
+       4 AS 'CLIENTE'
+FROM Rubro
+JOIN Producto ON rubr_id = prod_rubro
+JOIN Item_Factura ON prod_codigo = item_producto
+GROUP BY rubr_detalle, rubr_id
+
+--- ventas del rubro en pesos 
+SELECT 
+	r.rubr_id,
+	r.rubr_detalle,
+	SUM(it.item_cantidad * it.item_precio)	
+FROM 
+	Item_Factura it JOIN Producto P on p.prod_codigo = it.item_producto JOIN
+	RUBRO r on r.rubr_id = p.prod_rubro
+GROUP BY 
+	r.rubr_id,
+	r.rubr_detalle
+order by 
+	r.rubr_id asc 
+
+
+SELECT 
+*	
+FROM 
+	Item_Factura it JOIN Producto P on p.prod_codigo = it.item_producto JOIN
+	RUBRO r on r.rubr_id = p.prod_rubro
+WHERE
+	r.rubr_id = '0001'
+order by 
+	r.rubr_id asc 
+
+
+-- más vendido en el rubro 
+
+SELECT 
+	r.rubr_id,
+	r.rubr_detalle, 
+	SUM(it.item_cantidad)	
+FROM 
+	Item_Factura it JOIN Producto P on p.prod_codigo = it.item_producto JOIN
+	RUBRO r on r.rubr_id = p.prod_rubro
+GROUP BY 
+	r.rubr_id,
+	r.rubr_detalle
+order by 
+	r.rubr_id asc, 
+	4 desc
+
+
+
+SELECT 
+	r.rubr_id,
+	r.rubr_detalle, 
+	p.prod_detalle,
+	SUM(it.item_cantidad)	
+FROM 
+	Item_Factura it JOIN Producto P on p.prod_codigo = it.item_producto JOIN
+	RUBRO r on r.rubr_id = p.prod_rubro
+GROUP BY 
+	r.rubr_id,
+	r.rubr_detalle, 
+	p.prod_detalle
+order by 
+	r.rubr_id asc, 
+	4 desc
+
+
+-- los dos productos más vendidos en un rubro 
+
+SELECT TOP 2 
+	r.rubr_id,
+	r.rubr_detalle, 
+	p.prod_detalle,
+	SUM(it.item_cantidad)	
+FROM 
+	Item_Factura it JOIN Producto P on p.prod_codigo = it.item_producto JOIN
+	RUBRO r on r.rubr_id = p.prod_rubro
+GROUP BY 
+	r.rubr_id,
+	r.rubr_detalle, 
+	p.prod_detalle
+HAVING r.rubr_id = '0001'
+order by 
+	r.rubr_id asc, 
+	4 desc
+
+
+------------------------------------
+
+/*Ejercicio 19: en virtud de una recategorizacion de productos referida a la familia de los mismos se
+solicita que desarrolle una consulta sql que retorne para todos los productos:
+- Codigo de producto
+
+- Detalle del producto
+
+- Codigo de la familia del producto
+
+- Detalle de la familia actual del producto
+
+- Codigo de la familia sugerido para el producto
+
+- Detalle de la familia sugerido para el producto
+
+La familia sugerida para un producto es la que poseen la mayoria de los productos cuyo
+detalle coinciden en los primeros 5 caracteres.
+En caso que 2 o mas familias pudieran ser sugeridas se debera seleccionar la de menor
+codigo. Solo se deben mostrar los productos para los cuales la familia actual sea
+diferente a la sugerida
+Los resultados deben ser ordenados por detalle de producto de manera ascendente*/
+
+
+
+SELECT 
+	p.prod_codigo as [CODIGO PRODUCTO], 
+	p.prod_detalle as [DETALLE PRODUCTO], 
+	p.prod_familia as [CODIGO FAMILIA ACTUAL], 
+	f.fami_detalle as [DETALLE FAMILIA ACTUAL], 
+	1 as [CODIGO FAMILIA SUGERIDA], 
+	2 as [DETALLE FAMILIA PRODUCTO]
+FROM 
+Producto p JOIN Familia F on P.prod_familia = f.fami_id
+
+
+
+-----------------------------------------------------------------
+
+/*Ejercicio 20: escriba una consulta sql que retorne un ranking de los mejores 3 empleados del 2012
+Se debera retornar legajo, nombre y apellido, anio de ingreso, puntaje 2011, puntaje
+2012. El puntaje de cada empleado se calculara de la siguiente manera: para los que
+hayan vendido al menos 50 facturas el puntaje se calculara como la cantidad de facturas
+que superen los 100 pesos que haya vendido en el año, para los que tengan menos de 50
+facturas en el año el calculo del puntaje sera el 50% de cantidad de facturas realizadas
+por sus subordinados directos en dicho año.*/
+
+SELECT TOP 3
+	e.empl_codigo as [LEGAJO],
+	e.empl_nombre as [NOMBRE], 
+	e.empl_apellido as [APELLIDO], 
+	year(e.empl_ingreso) as [ANIO INGRESO], 
+	(
+			case when count(fact_numero) >= 50 then (select count(fact_numero) FROM 
+														Factura f1
+														where f1.fact_total > 100 and f1.fact_vendedor = e.empl_codigo and  year(f1.fact_fecha) = 2011)
+				ELSE  0.5 * (select count(fact_numero) from Factura f2  where year(f2.fact_fecha) = 2011 and f2.fact_vendedor in (select empl_codigo from Empleado em  where em.empl_jefe = e.empl_codigo)) 
+				end 			
+			
+	)   as [PUNTAJE 2011], 
+	(
+			case when count(fact_numero) >= 50 then (select count(fact_numero) FROM 
+														Factura f1
+														where f1.fact_total > 100 and f1.fact_vendedor = e.empl_codigo and  year(f1.fact_fecha) = 2012)
+				ELSE  0.5 * (select count(fact_numero) from Factura f2  where year(f2.fact_fecha) = 2012 and f2.fact_vendedor in (select empl_codigo from Empleado em  where em.empl_jefe = e.empl_codigo)) 
+				end 			
+			
+)
+		 as [PUNTAJE 2012]
+FROM 
+Empleado e join Factura f on f.fact_vendedor = e.empl_codigo 
+group by e.empl_codigo, e.empl_codigo,
+	e.empl_nombre, 
+	e.empl_apellido, 
+	year(e.empl_ingreso) 
+order by 5 desc
+
+select * from Empleado
+----- cantiad de facturas vendidas por vendendor 
+
+
+SELECT 
+	e.empl_codigo as [LEGAJO],
+	count(fact_numero) as[factura]
+FROM 
+Empleado e left join Factura f on f.fact_vendedor = e.empl_codigo 
+where fact_total > 100 
+and year(f.fact_fecha) = 2012
+group by e.empl_codigo
+having count(fact_numero) > 50
+
+--- puntaje del persona
+
+
+SELECT 
+	e.empl_codigo as [LEGAJO],
+	case when count(fact_numero) >= 50 then (select count(fact_numero) FROM 
+											Factura f1
+											where f1.fact_total > 100 and f1.fact_vendedor = e.empl_codigo and  year(f1.fact_fecha) = 2012)
+	ELSE  0.5 * (select count(fact_numero) from Factura f2  where year(f2.fact_fecha) = 2012 and f2.fact_vendedor in (select empl_codigo from Empleado em  where em.empl_jefe = e.empl_codigo)) 
+
+	END 
+FROM 
+Empleado e join Factura f on f.fact_vendedor = e.empl_codigo 
+group by e.empl_codigo
+
+
+
+
+select empl_codigo from Empleado 
+where empl_jefe = '1'
+
+
+---- subordinados de un vendedor ---- 
+
+select 
+ em.empl_jefe as [codigo jefe], 
+ em.empl_codigo as [codigo empleado]
+from empleado em
+order by 1
+
+--- vnetas de un subordinado
+select 
+ jef.empl_codigo as [codigo jefe], 
+ count(fact_numero) as [cantidad ventas subordinados]
+from empleado em join empleado jef on em.empl_jefe = jef.empl_codigo join Factura f2 on f2.fact_vendedor = em.empl_codigo
+group by  jef.empl_codigo
+order by 1
+
+
+select distinct
+ jef.empl_codigo as [codigo jefe], 
+ em.empl_codigo as [codigo empleado]
+ 
+from empleado em join empleado jef on em.empl_jefe = jef.empl_codigo 
+
+order by 1
+
+-- en tabla empleados -> ver qué codigos tienen como empl_jefe a mi código 
+
+
+
+
