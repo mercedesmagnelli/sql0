@@ -867,3 +867,104 @@ where r.rubr_detalle = 'FOSFOROS Y ENCENDEDORES'
 
 
 
+/*EJERCICIO 23. Realizar una consulta SQL que para cada año muestre :
+ Año
+ El producto con composición más vendido para ese año.
+ Cantidad de productos que componen directamente al producto más vendido
+ La cantidad de facturas en las cuales aparece ese producto.
+ El código de cliente que más compro ese producto.
+ El porcentaje que representa la venta de ese producto respecto al total de venta
+del año.
+*/
+
+
+SELECT 
+	YEAR(f.fact_fecha) AS [ANIO], 
+	c.comp_producto  AS [COMPOSICION MAS VENDIDO], 
+	count(distinct c.comp_componente) AS [CANTIDAD QUE COMPONEN], 
+	COUNT (DISTINCT f.fact_numero + f.fact_sucursal + f.fact_tipo) AS [CANTIDAD DE FACTURAS], 
+	(
+			SELECT TOP 1 f3.fact_cliente
+			FROM Item_Factura it3 join Factura f3 on f3.fact_numero + f3.fact_sucursal + f3.fact_tipo = it3.item_numero + it3.item_sucursal + it3.item_tipo
+			where it3.item_producto = c.comp_producto and YEAR(f.fact_fecha) = YEAR(f3.fact_fecha)
+			group by it3.item_producto, f3.fact_cliente
+			order by count(f3.fact_numero + f3.fact_sucursal + f3.fact_tipo) desc
+	
+	) AS [CLIENTE QUE MAS COMPRO], 
+	100 * sum(it.item_cantidad * it.item_precio) / (SELECT sum(f4.fact_total) from Factura f4 where year(f.fact_fecha) = year(f4.fact_fecha)) AS [PORCENTAJE]
+FROM Item_Factura it JOIN Factura f on f.fact_numero + f.fact_sucursal + f.fact_tipo = it.item_numero + it.item_sucursal + it.item_tipo
+JOIN Composicion c on c.comp_producto = it.item_producto
+WHERE it.item_producto in (select c.comp_producto from Composicion c)
+group by YEAR(f.fact_fecha), c.comp_producto 
+HAVING c.comp_producto = (SELECT TOP 1 it2.item_producto FROM Item_Factura it2 join Factura f2 on f2.fact_numero + f2.fact_sucursal + f2.fact_tipo = it2.item_numero + it2.item_sucursal + it2.item_tipo
+							where  year(f2.fact_fecha) =  year(f.fact_fecha)
+							GROUP BY it2.item_producto,  year(f2.fact_fecha)
+							HAVING it2.item_producto IN (select c1.comp_producto from composicion c1)
+							order by count(f2.fact_numero + f2.fact_sucursal + f2.fact_tipo) desc
+) 
+ORDER BY ((SELECT sum(f5.fact_total) from Factura f5 where year(f.fact_fecha) = year(f5.fact_fecha))) desc
+
+
+---------------------------
+cliente que mas compro 
+
+SELECT 
+it3.item_producto, f3.fact_cliente, count(f3.fact_numero + f3.fact_sucursal + f3.fact_tipo)
+FROM Item_Factura it3 join Factura f3 on f3.fact_numero + f3.fact_sucursal + f3.fact_tipo = it3.item_numero + it3.item_sucursal + it3.item_tipo
+group by it3.item_producto, f3.fact_cliente
+
+
+
+--------------------------
+
+select * from Composicion
+---------------
+El producto con composicon más vendido de X año 
+
+SELECT year(f2.fact_fecha),  it2.item_producto, count(f2.fact_numero + f2.fact_sucursal + f2.fact_tipo) 
+FROM Item_Factura it2 join Factura f2 on f2.fact_numero + f2.fact_sucursal + f2.fact_tipo = it2.item_numero + it2.item_sucursal + it2.item_tipo
+GROUP BY it2.item_producto,  year(f2.fact_fecha)
+HAVING it2.item_producto IN (select c1.comp_producto from composicion c1)
+order by 1, count(f2.fact_numero + f2.fact_sucursal + f2.fact_tipo) desc
+
+
+---------------
+
+
+SELECT 
+	*
+FROM Item_Factura it JOIN Factura f on f.fact_numero + f.fact_sucursal + f.fact_tipo = it.item_numero + it.item_sucursal + it.item_tipo
+WHERE it.item_producto in (select c.comp_producto from Composicion c
+
+
+
+
+--- clientes que compran un x producto 
+
+SELECT 
+
+* 
+
+FROM Item_Factura it JOIN Factura f on f.fact_numero + f.fact_sucursal + f.fact_tipo = it.item_numero + it.item_sucursal + it.item_tipo 
+
+
+/*
+El resultado deberá ser ordenado por el total vendido por año en forma descendente.
+24. Escriba una consulta que considerando solamente las facturas correspondientes a los
+dos vendedores con mayores comisiones, retorne los productos con composición
+facturados al menos en cinco facturas,
+La consulta debe retornar las siguientes columnas:
+ Código de Producto
+ Nombre del Producto
+ Unidades facturadas
+El resultado deberá ser ordenado por las unidades facturadas descendente.*/SELECT 	p.prod_codigo as [CODIGO],	p.prod_detalle as [PRODUCTO], 	SUM(item_cantidad) as [unidades facturadas]FROM Producto p
+JOIN Item_Factura ON prod_codigo = item_producto
+JOIN Factura f ON item_numero = fact_numero AND item_sucursal = fact_sucursal AND item_tipo = fact_tipo
+WHERE p.prod_codigo in (select c1.comp_producto from composicion c1) and f.fact_vendedor in (select top 2 e.empl_codigo from Empleado e order by e.empl_comision desc)
+group by p.prod_detalle, p.prod_codigo
+HAVING count(f.fact_tipo+f.fact_sucursal+f.fact_numero) >= 5
+order by 3
+
+
+---- comisiones de vendedores
+select * from Empleado e 
