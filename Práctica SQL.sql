@@ -977,6 +977,28 @@ envase devolviendo las siguientes columnas:
 Los datos deberan ser ordenados por año y dentro del año por el envase con más
 facturación de mayor a menor.*/
 
+SELECT YEAR(fact_fecha) AS 'Año',
+       enva_codigo AS 'Código de envase',
+	   enva_detalle AS 'Detalle del envase',
+	   (SELECT COUNT(prod_codigo) FROM Producto WHERE prod_envase = enva_codigo) AS 'Cantidad de productos con el envase', -- PROBAR CON LE FT JONI
+	   COUNT(DISTINCT prod_codigo) AS 'Cantidad de productos facturados con el envase',
+	   (SELECT TOP 1 prod_codigo
+	   FROM Producto 
+	   JOIN Item_Factura ON prod_codigo = item_producto
+	   WHERE prod_envase = enva_codigo
+	   GROUP BY prod_codigo
+	   ORDER BY SUM(item_cantidad)) AS 'Producto mas vendido con el envase',
+	   SUM(item_cantidad * item_precio) AS 'Monto total de venta de productos con el envase',
+	   SUM(item_cantidad * item_precio) * 100 / (SELECT SUM(f1.fact_total)
+	              FROM Factura f1
+	              WHERE YEAR(f1.fact_fecha) = YEAR(f.fact_fecha)) AS 'Porcentaje de ventas del envase respecto de las ventas totales del año'
+FROM Envases
+JOIN Producto ON enva_codigo = prod_envase
+JOIN Item_Factura ON prod_codigo = item_producto
+JOIN Factura f ON item_numero = f.fact_numero AND item_sucursal = f.fact_sucursal AND item_tipo = f.fact_tipo
+GROUP BY YEAR(f.fact_fecha), enva_codigo, enva_detalle
+ORDER BY YEAR(f.fact_fecha), 6 DESC
+
 /*Ejercicio 28: Escriba una consulta sql que retorne una estadística por Año y Vendedor que retorne las
 siguientes columnas:
 - Año.
@@ -990,6 +1012,29 @@ siguientes columnas:
 Los datos deberan ser ordenados por año y dentro del año por el vendedor que haya
 vendido mas productos diferentes de mayor a menor.*/
 
+SELECT YEAR(fact_fecha) AS 'Año',
+       empl_codigo AS 'Cóodigo de vendedor',
+	   RTRIM(empl_nombre) + ' ' + empl_apellido AS 'Nombre y apellido del vendedor',
+	   COUNT(fact_numero+fact_sucursal+fact_tipo) AS 'Cantidad de facturas realizadas',
+	   COUNT(DISTINCT fact_cliente) AS 'Cantidad de clientes atendidos',
+	   (SELECT COUNT(DISTINCT item_producto) 
+       FROM Item_Factura
+       JOIN Factura f1 ON item_numero = fact_numero AND item_sucursal = fact_sucursal AND item_tipo = fact_tipo
+	   JOIN Composicion on item_producto = comp_producto
+       WHERE YEAR(f1.fact_fecha) = YEAR(f.fact_fecha) AND f1.fact_vendedor = empl_codigo) AS 'Cantidad de productos con composicion facturados',
+	   (SELECT COUNT(item_producto) 
+       FROM Item_Factura
+       JOIN Factura f1 ON item_numero = fact_numero AND item_sucursal = fact_sucursal AND item_tipo = fact_tipo
+       WHERE YEAR(f1.fact_fecha) = YEAR(f.fact_fecha) AND f1.fact_vendedor = empl_codigo AND item_producto NOT IN (SELECT comp_producto FROM Composicion)) AS 'Cantidad de productos sin composicion facturados',
+	   SUM(fact_total) AS 'Monto total vendido por el vendedor'
+FROM Empleado
+JOIN Factura f ON empl_codigo = f.fact_vendedor
+GROUP BY YEAR(f.fact_fecha), empl_codigo, empl_nombre, empl_apellido
+ORDER BY YEAR(f.fact_fecha), (SELECT COUNT(DISTINCT item_producto)
+                             FROM Item_Factura
+							 JOIN Factura f1 ON item_numero = f1.fact_numero AND item_sucursal = f1.fact_sucursal AND item_tipo = f1.fact_tipo
+							 WHERE f1.fact_vendedor = empl_codigo)
+
 /*Ejercicio 29: se solicita que realice una estadística de venta por producto para el año 2011, solo para
 los productos que pertenezcan a las familias que tengan más de 20 productos asignados
 a ellas, la cual deberá devolver las siguientes columnas:
@@ -1000,6 +1045,22 @@ d. Cantidad de facturas en la que esta ese producto
 e. Monto total facturado de ese producto
 Solo se deberá mostrar un producto por fila en función a los considerandos establecidos
 antes. El resultado deberá ser ordenado por el la cantidad vendida de mayor a menor.*/
+
+SELECT prod_codigo AS 'Código del producto',
+       prod_detalle AS 'Descripción del producto',
+	   SUM(ISNULL(item_cantidad, 0)) AS 'Cantidad vendida',
+	   COUNT(DISTINCT fact_numero+fact_sucursal+fact_tipo) AS 'Cantidad de facturas en las que está el producto',
+	   SUM(item_cantidad * item_precio) AS 'Monto total facturado'
+FROM Producto
+LEFT JOIN Item_Factura ON prod_codigo = item_producto
+LEFT JOIN Factura ON item_numero = fact_numero AND item_sucursal = fact_sucursal AND item_tipo = fact_tipo
+WHERE YEAR(fact_fecha) = 2011 AND prod_familia IN (SELECT fami_id
+                      FROM Familia
+                      JOIN Producto ON fami_id = prod_familia
+                      GROUP BY fami_id
+                      HAVING COUNT(prod_codigo) > 20)
+GROUP BY prod_codigo, prod_detalle
+ORDER BY 3 DESC
 
 /*Ejercicio 30: se desea obtener una estadistica de ventas del año 2012, para los empleados que sean
 jefes, o sea, que tengan empleados a su cargo, para ello se requiere que realice la
@@ -1013,6 +1074,27 @@ Debido a la perfomance requerida, solo se permite el uso de una subconsulta si f
 necesario.
 Los datos deberan ser ordenados por de mayor a menor por el Total vendido y solo se
 deben mostrarse los jefes cuyos subordinados hayan realizado más de 10 facturas.*/
+
+SELECT jefe.empl_nombre AS 'Nombre del jefe',
+       COUNT(DISTINCT subordinado.empl_codigo) AS 'Cantidad de empleados a cargo',
+	   SUM(fact_total) AS 'Monto total vendido de los empleados a cargo',
+	   COUNT(DISTINCT fact_numero+fact_sucursal+fact_tipo) AS 'Cantidad de facturas realizadas por los empleados a cargo',
+	   (SELECT TOP 1 empl_nombre
+	   FROM Empleado sub
+	   JOIN Factura ON sub.empl_codigo = fact_vendedor
+	   WHERE sub.empl_jefe = jefe.empl_codigo AND YEAR(fact_fecha) = 2012
+	   GROUP BY sub.empl_codigo, sub.empl_nombre 
+	   ORDER BY SUM(fact_total) DESC) AS 'Nombre del empleado con mejor venta'
+FROM Empleado jefe
+JOIN Empleado subordinado ON jefe.empl_codigo = subordinado.empl_jefe
+LEFT JOIN Factura ON subordinado.empl_codigo = fact_vendedor
+WHERE YEAR (fact_fecha) = 2012
+GROUP BY jefe.empl_codigo, jefe.empl_nombre
+HAVING COUNT(DISTINCT fact_numero+fact_sucursal+fact_tipo) > 10
+ORDER BY 2 DESC
+
+/*Falta el empleado Pedro, que tiene un solo empleado a cargo, y esto no es consecuencia del filtro de grupo (HAVING), ya que sin él tampoco lo muestra. Es
+consecuencia del filtro WHERE, igual que en el ejercicio 14 y el 29.*/
 
 /*Ejercicio 31: escriba una consulta sql que retorne una estadística por Año y Vendedor que retorne las
 siguientes columnas:
