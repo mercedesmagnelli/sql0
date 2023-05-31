@@ -1109,6 +1109,29 @@ siguientes columnas:
 Los datos deberan ser ordenados por año y dentro del año por el vendedor que haya
 vendido mas productos diferentes de mayor a menor.*/
 
+SELECT YEAR(fact_fecha) AS 'Año',
+       empl_codigo AS 'Cóodigo de vendedor',
+	   RTRIM(empl_nombre) + ' ' + empl_apellido AS 'Nombre y apellido del vendedor',
+	   COUNT(fact_numero+fact_sucursal+fact_tipo) AS 'Cantidad de facturas realizadas',
+	   COUNT(DISTINCT fact_cliente) AS 'Cantidad de clientes atendidos',
+	   (SELECT COUNT(DISTINCT item_producto) 
+       FROM Item_Factura
+       JOIN Factura f1 ON item_numero = fact_numero AND item_sucursal = fact_sucursal AND item_tipo = fact_tipo
+	   JOIN Composicion on item_producto = comp_producto
+       WHERE YEAR(f1.fact_fecha) = YEAR(f.fact_fecha) AND f1.fact_vendedor = empl_codigo) AS 'Cantidad de productos con composicion facturados',
+	   (SELECT COUNT(item_producto) 
+       FROM Item_Factura
+       JOIN Factura f1 ON item_numero = fact_numero AND item_sucursal = fact_sucursal AND item_tipo = fact_tipo
+       WHERE YEAR(f1.fact_fecha) = YEAR(f.fact_fecha) AND f1.fact_vendedor = empl_codigo AND item_producto NOT IN (SELECT comp_producto FROM Composicion)) AS 'Cantidad de productos sin composicion facturados',
+	   SUM(fact_total) AS 'Monto total vendido por el vendedor'
+FROM Empleado
+JOIN Factura f ON empl_codigo = f.fact_vendedor
+GROUP BY YEAR(f.fact_fecha), empl_codigo, empl_nombre, empl_apellido
+ORDER BY YEAR(f.fact_fecha), (SELECT COUNT(DISTINCT item_producto)
+                             FROM Item_Factura
+							 JOIN Factura f1 ON item_numero = f1.fact_numero AND item_sucursal = f1.fact_sucursal AND item_tipo = f1.fact_tipo
+							 WHERE f1.fact_vendedor = empl_codigo)
+
 /*Ejercicio 32: Se desea conocer las familias que sus productos se facturaron juntos en las mismas
 facturas para ello se solicita que escriba una consulta sql que retorne los pares de
 familias que tienen productos que se facturaron juntos. Para ellos deberá devolver las
@@ -1121,6 +1144,24 @@ siguientes columnas:
 - Total vendido
 Los datos deberan ser ordenados por Total vendido y solo se deben mostrar las familias
 que se vendieron juntas más de 10 veces.*/
+
+SELECT fam1.fami_id AS 'Código de familia',
+       fam1.fami_detalle AS 'Detalle de familia',
+	   fam2.fami_id AS 'Código de familia',
+	   fam2.fami_detalle AS 'Detalle de familia',
+	   COUNT(DISTINCT fac.fact_numero+fac.fact_sucursal+fac.fact_tipo) AS 'Cantidad de facturas',
+	   SUM(i1.item_cantidad * i1.item_precio) + SUM(i2.item_cantidad * i2.item_precio) AS 'Total vendido'
+FROM Familia fam1
+JOIN Producto p1 ON fam1.fami_id = prod_familia
+JOIN Item_Factura i1 ON prod_codigo = i1.item_producto
+JOIN Factura fac ON i1.item_numero = fac.fact_numero AND i1.item_sucursal = fac.fact_sucursal AND i1.item_tipo = fac.fact_tipo
+JOIN Item_Factura i2 ON i2.item_numero = fac.fact_numero AND i2.item_sucursal = fac.fact_sucursal AND i2.item_tipo = fac.fact_tipo
+JOIN Producto p2 ON i2.item_producto = p2.prod_codigo
+JOIN Familia fam2 ON p2.prod_familia = fam2.fami_id
+WHERE p1.prod_codigo < p2.prod_codigo AND fam1.fami_id < fam2.fami_id
+GROUP BY fam1.fami_id, fam1.fami_detalle,fam2.fami_id, fam2.fami_detalle
+HAVING  COUNT(DISTINCT fac.fact_numero+fac.fact_sucursal+fac.fact_tipo) > 10
+ORDER BY 6 DESC
 
 /*Ejercicio 33: se requiere obtener una estadística de venta de productos que sean componentes. Para
 ello se solicita que realiza la siguiente consulta que retorne la venta de los
