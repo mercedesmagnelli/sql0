@@ -1230,6 +1230,26 @@ mal hechas se debe retornar 0. Las columnas que se deben mostrar son:
 2- Mes
 3- Cantidad de facturas mal realizadas.*/
 
+SELECT p.prod_rubro AS 'Código de rubro',
+       MONTH(f.fact_fecha) AS 'Mes',
+	   COUNT(DISTINCT f.fact_numero+f.fact_sucursal+f.fact_tipo) AS 'Cantidad de facturas mal realizadas'
+FROM Producto p
+JOIN Item_Factura ON prod_codigo = item_producto
+JOIN Factura f ON item_numero = f.fact_numero AND item_sucursal = f.fact_sucursal AND item_tipo = f.fact_tipo
+WHERE YEAR(f.fact_fecha) = 2011
+      AND f.fact_numero+f.fact_sucursal+f.fact_tipo IN (SELECT f1.fact_numero+f1.fact_sucursal+f1.fact_tipo
+                                                       FROM Factura f1
+                                                       JOIN Item_Factura ON f1.fact_numero = item_numero
+												                        AND f1.fact_sucursal = item_sucursal
+																	    AND f1.fact_tipo = item_tipo
+                                                       JOIN Producto p1 ON item_producto = p1.prod_codigo
+                                                       WHERE YEAR(f1.fact_fecha) = YEAR(f.fact_fecha)
+												         AND MONTH(f1.fact_fecha) = MONTH(f.fact_fecha)
+													     AND p1.prod_rubro = p.prod_rubro
+                                                      GROUP BY f1.fact_numero+f1.fact_sucursal+f1.fact_tipo
+                                                      HAVING COUNT(p1.prod_rubro) = 2)
+GROUP BY MONTH(f.fact_fecha), p.prod_rubro
+
 /*Ejercicio 35: se requiere realizar una estadística de ventas por año y producto, para ello se solicita
 que escriba una consulta sql que retorne las siguientes columnas:
 - Año
@@ -1242,3 +1262,18 @@ se debera retornar 0.
 - Porcentaje de la venta de ese producto respecto a la venta total de ese año.
 Los datos deberan ser ordenados por año y por producto con mayor cantidad vendida.*/
 
+SELECT YEAR(f.fact_fecha) AS 'Año',
+       prod_codigo AS 'Código del producto',
+	   prod_detalle AS 'Detalle del producto',
+	   COUNT(DISTINCT f.fact_numero+f.fact_sucursal+f.fact_tipo) AS 'Cantidad de facturas emitidas',
+	   COUNT(DISTINCT f.fact_cliente) AS 'Cantidad de compradores diferentes que lo compraron',
+	   (SELECT COUNT(*) FROM Composicion WHERE comp_componente = prod_codigo) AS 'Cantidad de productos a los cuales compone',
+	   SUM(item_cantidad * item_precio) * 100 / (SELECT SUM(f1.fact_total)
+	                                            FROM Factura f1
+												WHERE YEAR(f1.fact_fecha) = YEAR(f.fact_fecha))
+												AS 'Porcentaje de la venta del producto respecto a la venta total'
+FROM Producto
+JOIN Item_Factura ON prod_codigo = item_producto
+JOIN Factura f ON item_numero = f.fact_numero AND item_sucursal = f.fact_sucursal AND item_tipo = f.fact_tipo
+GROUP BY YEAR(fact_fecha), prod_codigo, prod_detalle
+ORDER BY 1 ASC, SUM(item_cantidad) DESC
