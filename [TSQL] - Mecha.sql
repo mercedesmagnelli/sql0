@@ -46,4 +46,12 @@ SELECT * FROM sys.objects WHERE type = 'FN';
 
 
 
+/*Realizar una función que dado un artículo y una fecha, retorne el stock que
+existía a esa fecha*/
+
+
+
+
+
+
 
