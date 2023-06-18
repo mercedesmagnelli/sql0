@@ -7,7 +7,7 @@ los que en monto total facturado anual fue el máximo. De esos clientes mostrar ,
 en el último año.
 Nota: No se puede usar select en el from.
 */
-
+ 
 
 SELECT C1.clie_razon_social,C1.clie_domicilio,(SELECT SUM(item_cantidad*item_precio) FROM Item_Factura 
 											   JOIN Factura ON fact_numero+fact_tipo+fact_sucursal=item_numero+item_tipo+item_sucursal
