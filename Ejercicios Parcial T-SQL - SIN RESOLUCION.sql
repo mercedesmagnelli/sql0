@@ -9,12 +9,176 @@ GO
 Se solicita que se guarde en una tabla (producto, cantidad a reponer) en función del criterio antes mencionado. */
 
 
+
+IF OBJECT_ID('calcular_stock') IS NOT NULL
+    DROP procedure calcular_stock
+GO
+
+IF OBJECT_ID('stock_a_reponer') IS NOT NULL
+    DROP table dbo.stock_a_reponer
+GO
+
+create table stock_a_reponer (
+	cod_prod int, 
+	cantidad int
+);
+
+-- si vinieran los dos valores por parametro
+CREATE PROCEDURE calcular_stock @producto int, @fecha smalldatetime
+AS
+BEGIN
+   DECLARE @stock_calculado int 
+   DECLARE @fechaAnterior smalldatetime 
+   SET @fechaAnterior = DATEADD(MONTH, -3, @fecha)
+   
+	select @stock_calculado =  round(avg(it.item_cantidad),0)
+	from Item_Factura it join Factura f on f.fact_tipo + f.fact_numero + f.fact_sucursal = it.item_tipo + it.item_numero + it.item_sucursal
+	where f.fact_fecha between @fechaAnterior and @fecha
+	and @producto = it.item_producto
+	group by it.item_producto 
+
+	INSERT INTO stock_a_reponer VALUES (@producto, @stock_calculado)
+
+END;
+
+
+
+-- si viene solo la fecha por parametro 
+CREATE PROCEDURE calcular_stock  @fecha smalldatetime
+AS
+BEGIN
+   DECLARE @stock_calculado int 
+   DECLARE @fechaAnterior smalldatetime 
+   SET @fechaAnterior = DATEADD(MONTH, -3, @fecha)
+   
+	INSERT INTO stock_a_reponer
+	select it.item_producto, ceiling(sum(it.item_cantidad)/3)
+	from Item_Factura it join Factura f on f.fact_tipo + f.fact_numero + f.fact_sucursal = it.item_tipo + it.item_numero + it.item_sucursal
+	where f.fact_fecha between @fechaAnterior and @fecha
+	group by it.item_producto
+		
+END;
+
+-- EXEC NombreDelStoredProc @Parametro1 = Valor1, @Parametro2 = Valor2;
+exec calcular_stock @fecha = '2012-08-10 00:00:00'
+
+
+select * from stock_a_reponer
+order by cod_prod
+
+
+select it.item_producto, ceiling(sum(it.item_cantidad)/3)
+	from Item_Factura it join Factura f on f.fact_tipo + f.fact_numero + f.fact_sucursal = it.item_tipo + it.item_numero + it.item_sucursal
+	where f.fact_fecha between'2012-05-10 00:00:00' and '2012-08-10 00:00:00'
+	group by it.item_producto
+	order by 1
+
+
+select * from stock_a_reponer
+
+SELECT * from Item_Factura it join Factura f on f.fact_tipo + f.fact_numero + f.fact_sucursal = it.item_tipo + it.item_numero + it.item_sucursal where it.item_numero = '00093385'
+
+select * from stock_a_reponer
+
+
+-- '2012-08-10 00:00:00'
+
+select round(avg(it.item_cantidad),0)
+	from Item_Factura it join Factura f on f.fact_tipo + f.fact_numero + f.fact_sucursal = it.item_tipo + it.item_numero + it.item_sucursal
+	where f.fact_fecha between '2012-05-10 00:00:00' and '2012-08-10 00:00:00'
+	and '00001416' = it.item_producto
+	group by it.item_producto
 --------------------------------------------------------------------------------------------------------------------
 
 /*****EJERCICIO 2 ****/
 
 /* Recalcular precios de prods con composicion
 Nuevo precio: suma de precio compontentes * 0,8 */
+
+-- dado que la consigna es re cortita, voy a asumir que hay que actualizar TODOS los precios de TODAS las composiciones, entonces
+-- recorro todos los productos y solo actualizo aquellos que pertenezcan a la tabla de composicion
+
+/*
+PARA CADA PRODUCTO, ACTUALIZO SU PRECIO. LA LÓGICA DE QUÉ PRECIO AGREGAR, VA A ESTAR DETERMINADA EN LA FUNCIÓN
+*/
+
+DROP FUNCTION calcular_precio
+DROP PROCEDURE actualizar_precios_combos
+
+CREATE FUNCTION calcular_precio(@PRODUCTO char(8))
+RETURNS decimal(12,2)
+AS
+BEGIN 
+
+	DECLARE @PRECIO_TOTAL decimal(12,2) 
+
+	IF @PRODUCTO NOT IN (SELECT comp_producto FROM Composicion)
+		BEGIN -- quiere decir que no lo tengo que acutalizar porque es uno sin composicion
+		SET @PRECIO_TOTAL = (SELECT prod_precio FROM Producto WHERE prod_codigo = @PRODUCTO)
+
+		return @PRECIO_TOTAL 
+		END
+	ELSE -- quiere decir que es un producto con composicion, por lo que tengo que recorrer todos los productos que lo componen con un cursor y sumar al precio total lo que salen 
+		BEGIN 
+			DECLARE @CANTIDAD int, @COMPONENTE char(8)
+			DECLARE cursor_componentes CURSOR FOR -- se genera un cursor para la tabla de componentes del producto con codigo @PRODUCTO
+					(SELECT c.comp_cantidad, c.comp_componente FROM Composicion c
+					WHERE @PRODUCTO = c.comp_producto)
+
+					-- recalculo el precio
+					OPEN cursor_componentes 
+					FETCH NEXT FROM cursor_componentes INTO @CANTIDAD, @COMPONENTE
+					WHILE @@FETCH_STATUS = 0
+						BEGIN
+						-- esto me sirve solamente si sé que los productos finales son productos SIN composicion (es el caso de estas tablas del modelo) 
+						--SET @PRECIO_TOTAL = @PRECIO_TOTAL + @CANTIDAD * (SELECT prod_precio FROM Producto WHERE prod_codigo = @COMPONENTE)
+
+						-- para hacerlo más abstracto, entonces me conviene hacerla recursiva
+						SET @PRECIO_TOTAL = @PRECIO_TOTAL + @CANTIDAD * dbo.calcular_precio(@COMPONENTE)
+				
+					FETCH NEXT FROM cursor_componentes INTO @CANTIDAD, @COMPONENTE
+						END
+					close cursor_componentes
+					deallocate cursor_componentes
+		END
+		return @PRECIO_TOTAL 
+		END 
+
+
+
+CREATE PROCEDURE actualizar_precios_combos
+AS
+BEGIN
+	DECLARE @PRODUCTO char(8)
+	DECLARE @PRECIO_NUEVO decimal(12,2) = 0
+
+	-- abro el cursor para ir recorriendo TODOS los productos 
+
+	DECLARE cursor_productos CURSOR FOR 
+		SELECT p.prod_codigo FROM Producto p 
+
+		OPEN cursor_productos
+			FETCH NEXT FROM cursor_productos INTO @PRODUCTO
+			WHILE @@FETCH_STATUS = 0
+				BEGIN
+
+					-- actualizo el precio 
+					UPDATE Producto SET prod_precio = dbo.calcular_precio(@PRODUCTO) * 0.8 WHERE prod_codigo = @PRODUCTO
+
+					FETCH NEXT FROM cursor_productos INTO @PRODUCTO
+				END
+				CLOSE cursor_productos
+				DEALLOCATE cursor_productos
+END
+GO
+
+
+EXEC actualizar_precios_combos
+
+
+
+
+
 
 
 

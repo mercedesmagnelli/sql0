@@ -7,8 +7,32 @@ los que en monto total facturado anual fue el máximo. De esos clientes mostrar ,
 en el último año.
 Nota: No se puede usar select en el from.
 */
- 
 
+
+SELECT 
+	c.clie_razon_social  as [RAZON SOCIAL],
+	c.clie_domicilio  as [DOMICILIO], 
+	(select sum(it1.item_cantidad) from Item_Factura it1 join Factura f1 
+		on f1.fact_tipo + f1.fact_numero + f1.fact_sucursal = it1.item_tipo + it1.item_numero + it1.item_sucursal
+	where   c.clie_codigo = f1.fact_cliente and 
+			year(f1.fact_fecha) = (select max(year(fact_fecha)) from Factura)
+	group by f1.fact_cliente) as [CANTIDAD UNIDADES COMPRADAS]
+FROM Factura f JOIN Cliente c on c.clie_codigo = f.fact_cliente 
+group by c.clie_razon_social, c.clie_domicilio, year(f.fact_fecha), clie_codigo
+having clie_codigo in (
+	select TOP 1 f2.fact_cliente from Item_Factura it join Factura f2 on  f2.fact_sucursal + f2.fact_tipo + f2.fact_numero = it.item_sucursal +  it.item_tipo + it.item_numero
+	where year(f2.fact_fecha) = year(f.fact_fecha)
+	group by f2.fact_cliente
+	order by sum(it.item_cantidad * it.item_precio) desc
+) and 
+clie_codigo in (
+select TOP 1 f2.fact_cliente from Item_Factura it join Factura f2 on  f2.fact_sucursal + f2.fact_tipo + f2.fact_numero = it.item_sucursal +  it.item_tipo + it.item_numero
+	where year(f2.fact_fecha) = year(f.fact_fecha) + 1
+	group by f2.fact_cliente
+	order by sum(it.item_cantidad * it.item_precio) desc
+)
+
+ 
 
  -- EJERCICIO 2
 
@@ -21,6 +45,26 @@ De esos productos mostrar:
 El resultado deberá ser ordenado por cantidad vendida en años anteriores.
 */
 
+
+SELECT 
+		it.item_producto as [CODIGO DE PRODUCTO], 
+		p.prod_detalle as [NOMBRE DE PRODUCTO], 
+		(case 
+			when it.item_producto in (select c.comp_producto from Composicion c) then 'PRODUCTO COMPUESTO'
+			else 'PRODUCTO SIN COMPOSICION'
+		end) AS [COMPOSICION]
+FROM 
+	Item_Factura it join Factura f on f.fact_numero + f.fact_sucursal + f.fact_tipo = it.item_numero + it.item_sucursal + it.item_tipo
+	join Producto p on p.prod_codigo = it.item_producto
+where 
+	year(f.fact_fecha) < 2012 -- vendidos en años anteriores
+	and it.item_producto not in (
+	select it2.item_producto from Item_Factura it2 join Factura f on f.fact_numero + f.fact_sucursal + f.fact_tipo = it2.item_numero + it2.item_sucursal + it2.item_tipo
+	where year(f.fact_fecha) = 2012) -- no vendidos en 2012
+group by
+	it.item_producto, p.prod_detalle 
+order by 
+	sum(it.item_cantidad) asc
 
 -- EJERCICIO 3
 /* Foto 1
