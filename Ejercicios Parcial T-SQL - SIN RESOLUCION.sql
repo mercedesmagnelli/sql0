@@ -192,6 +192,82 @@ NOTA: En caso de que se facture un producto compuesto, deberá controlar que exis
 depósito '00' de cada uno de sus componentes. */
 
 
+-- CREO QUE TRIGGER PARA QUE NO SE PUEDAN AGREGAR PRODUCTOS A LA TABLA ITEM FACTURA 
+
+
+DROP TRIGGER CONTROL_STOCK_NEGATIVO
+DROP FUNCTION haystock 
+
+CREATE TRIGGER control_stock_negativo ON ITEM_FACTURA FOR INSERT
+AS
+BEGIN
+    
+	-- si no hay stock -> tengo que hacer rollback para que no pase 
+	-- me tengo que fijar sobre la tabla de insertados 
+
+
+	-- tieneStockSuficiente -> 0: no; 1 si
+	IF EXISTS (SELECT I.item_producto, I.item_cantidad FROM inserted I WHERE dbo.hayStock(I.item_producto, I.item_cantidad) = 0) -- EL STOCK DE LO QUE SE INSERTO ES 0
+	BEGIN
+		ROLLBACK
+	END
+	
+END
+
+CREATE FUNCTION hayStock(@producto char(8), @cantidad int)
+RETURNS int
+BEGIN
+	DECLARE @B_STOCK int
+	SET @B_STOCK = 1 --  HAY STOCK POR DEFAULT SIEMPRE
+
+
+	IF @producto not in (select c.comp_producto from Composicion c)
+		BEGIN
+			DECLARE @CANTIDAD_PROD_FINAL int
+			 -- para saber la disponibilidad de un producto en el deposito 00 ->
+			SET @CANTIDAD_PROD_FINAL =  (SELECT s.stoc_cantidad FROM STOCK s where @producto = s.stoc_producto and s.stoc_deposito = '00')
+			-- hay mas sotck del que solicito
+			IF @CANTIDAD_PROD_FINAL <= @cantidad
+				BEGIN
+					SET @B_STOCK = 0
+					return @B_STOCK
+				END
+		END
+	ELSE -- es compuesto
+	-- recorro la tabla de composicion
+	DECLARE @CANT_COMPONENTES int
+	DECLARE @COD_COMPONENTE char(8)
+	DECLARE componentes cursor for
+		select c.comp_componente, c.comp_cantidad from Composicion c
+
+	OPEN componentes
+	FETCH NEXT FROM componentes INTO @COD_COMPONENTE, @CANT_COMPONENTES
+	
+		WHILE @@FETCH_STATUS = 0 
+		BEGIN
+
+			-- tengo que recorrer hasta que alguno NO tenga disponibilidad, entonces 
+			-- el corte de control sería si alguno me da que tiene 0
+
+			IF (dbo.hayStock(@COD_COMPONENTE, @CANT_COMPONENTES * @cantidad) = 0)
+				BEGIN
+					SET @B_STOCK = 0
+					RETURN @B_STOCK
+				END
+			
+				FETCH NEXT FROM componentes INTO @COD_COMPONENTE, @CANT_COMPONENTES
+		END
+		
+			CLOSE componentes
+			deallocate componentes
+	RETURN @B_STOCK -- ME HACE AGREGARLO PARA QUE COMPILE
+	END
+
+GO 
+
+
+select * from STOCK
+
 --------------------------------------------------------------------------------------------------------------------
 
 /*****EJERCICIO 4 ****/
