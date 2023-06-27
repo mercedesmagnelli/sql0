@@ -279,6 +279,61 @@ TOP_CLIENTE( ID_CLIENTE, CANTIDAD_TOTAL_COMPRADA) y actualmente tiene datos
 y cumplen con la condición. */
 
 
+DROP TABLE TOP_CLIENTE
+
+create table TOP_CLIENTE(
+	ID_CLIENTE char(8), 
+	CANTIDAD_TOTAL_COMPRADA decimal(12,2)
+)
+DROP TRIGGER dbo.nuevo_top_cliente
+
+
+CREATE TRIGGER dbo.nuevo_top_cliente ON Item_Factura FOR INSERT
+AS
+BEGIN
+	declare @TIPO char(1), @SUCURSAL char(4), @NUMERO char(8), @CANTIDAD decimal(12,2)
+	
+	SELECT @TIPO = i.item_tipo, @SUCURSAL = i.item_sucursal,  @NUMERO = i.item_numero, @CANTIDAD = i.item_cantidad from inserted i
+	
+
+	-- CODIGO DE CLIENTE QUE INSERTO
+
+	DECLARE @NUEVA_CANTIDAD decimal(12,2), @CLIENTE_NUEVO char(6)
+	
+
+	SELECT @CLIENTE_NUEVO = f.fact_cliente FROM Factura f
+	where @TIPO = f.fact_tipo 
+	and @SUCURSAL = f.fact_sucursal
+	AND @NUMERO = f.fact_numero
+
+	-- CALCULO CUANTO ES LO NUEVO COMPRADO POR EL CLIENTE (TODOS LOS PRODUCTOS) 
+
+	SELECT @NUEVA_CANTIDAD = sum(it.item_cantidad) + @CANTIDAD FROM Item_Factura it 
+	join Factura f on f.fact_numero + f.fact_sucursal+f.fact_tipo=it.item_numero+it.item_sucursal+it.item_tipo
+	where @CLIENTE_NUEVO = f.fact_cliente
+	
+		/*id_cliente -> ¿cuanto compro en total? -> ES MAS QUE EL TOP CLIENTE? -> REEMPLAZO 
+				     						   -> ES MENOS QUE EL TOP CLIENTE? -> MANTENGO AL OTRO */
+
+
+	IF(@NUEVA_CANTIDAD > (SELECT TOP 1 c.CANTIDAD_TOTAL_COMPRADA from TOP_CLIENTE c))
+	BEGIN 
+		BEGIN TRANSACTION T 
+
+		DELETE FROM TOP_CLIENTE
+		
+		INSERT INTO TOP_CLIENTE (ID_CLIENTE, CANTIDAD_TOTAL_COMPRADA)
+		VALUES (@CLIENTE_NUEVO, @NUEVA_CANTIDAD)
+	
+		COMMIT TRANSACTION T
+	END 
+
+END
+GO
+
+
+
+
 /*****EJERCICIO 5 ****/
 
 /* Implementar el/los objetos y aislamientos necesarios para poder implementar
@@ -292,6 +347,8 @@ NOTA: No se puede usar la UNIQUE CONSTRAINT ni cambiar la PRIMARY KEY para resol
 /*UNIQUE: controla una clave por unicidad, es decir, controla que ese valor NO se repita en la misma columna, puede tener un NULL pero solamente 1.*/
 
 
+/*TA DIFICIL */
+
 /*****EJERCICIO 6 ****/
 
 
@@ -302,9 +359,76 @@ Implementar el/los objetos necesarios para implementar la sigueinte restricción 
 Cuando se inserta en una venta un combo, nuca se deberá guardar el producto COMBO, sino, la descomposición de sus componentes. 
 NOTA: Se sabe que actualmente todos los art{iculos guardados de ventas están decompuestos en sus componentes. 
 
-
-
 */
+
+DROP TRIGGER dbo.guardar_productos_descompuestos
+
+CREATE TRIGGER dbo.guardar_productos_descompuestos ON Item_Factura FOR INSERT
+AS
+BEGIN
+	
+
+	DECLARE @CANTIDAD decimal(12,2), @NUMERO char(8), @PRECIO decimal(12,2), @PRODUCTO char(8), @SUCURSAL char(4), @TIPO char(1)
+	DECLARE cursor_inserted CURSOR FOR 
+					SELECT i.item_cantidad, i.item_numero, i.item_precio, i.item_producto, i.item_sucursal, i.item_tipo from inserted i 
+
+				OPEN cursor_inserted
+				FETCH NEXT FROM cursor_inserted INTO @CANTIDAD, @NUMERO, @PRECIO, @PRODUCTO, @SUCURSAL, @TIPO
+				WHILE @@FETCH_STATUS = 0
+					BEGIN
+								
+						EXEC dbo.insertar_producto @CANTIDAD,@NUMERO,@PRECIO, @PRODUCTO, @SUCURSAL, @TIPO					
+
+					FETCH NEXT FROM cursor_inserted INTO @CANTIDAD, @NUMERO, @PRECIO, @PRODUCTO, @SUCURSAL, @TIPO
+					END
+					CLOSE cursor_inserted
+					DEALLOCATE cursor_inserted
+			END
+
+END
+GO
+
+DROP PROCEDURE dbo.insertar_producto
+
+CREATE PROCEDURE dbo.insertar_producto(@CANTIDAD decimal(12,2), @NUMERO char(8), @PRECIO decimal(12,2), @PRODUCTO char(8), @SUCURSAL char(4), @TIPO char(1))
+AS
+BEGIN
+	
+	IF(@PRODUCTO not in (select comp_producto from Composicion)) -- NO EXISTE EN LA TABLA COMPOSICION, INSERTAR DIRECTAMENTE
+		BEGIN
+		INSERT INTO Item_Factura(item_tipo, item_sucursal, item_numero, item_producto, item_cantidad, item_precio)
+		VALUES (@TIPO, @SUCURSAL, @NUMERO, @PRODUCTO, @CANTIDAD, @PRECIO)
+			
+		END
+	ELSE -- ES UNA COMPOSICION
+		BEGIN 
+			DECLARE @CANTIDAD_COMP int, @COMPONENTE char(8)
+			DECLARE cursor_componentes CURSOR FOR -- se genera un cursor para la tabla de componentes del producto con codigo @PRODUCTO
+					(SELECT c.comp_cantidad, c.comp_componente FROM Composicion c
+					WHERE @PRODUCTO = c.comp_producto)
+
+					OPEN cursor_componentes 
+					FETCH NEXT FROM cursor_componentes INTO @CANTIDAD_COMP, @COMPONENTE
+					WHILE @@FETCH_STATUS = 0
+						BEGIN
+
+						DECLARE @NUEVA_CANTIDAD decimal(12,2)
+						SET @NUEVA_CANTIDAD = @CANTIDAD * @CANTIDAD_COMP
+						
+						DECLARE @NUEVO_PRECIO DECIMAL(12,2)
+						SET @NUEVO_PRECIO = (SELECT p.prod_precio from Producto p where p.prod_codigo = @COMPONENTE)
+																							
+						EXEC dbo.insertar_producto @NUEVA_CANTIDAD,@NUMERO, @NUEVO_PRECIO, @COMPONENTE, @SUCURSAL, @TIPO	
+
+				
+					FETCH NEXT FROM cursor_componentes INTO @CANTIDAD_COMP, @COMPONENTE
+						END
+					close cursor_componentes
+					deallocate cursor_componentes
+
+		END
+
+END
 
 /*EJERCICIO  7*/
 

@@ -159,18 +159,114 @@ Armar una consulta que muestra para todos los productos:
 Nota: No se permite usar sub select en el FROM.
 */
 
---EJERCICIO 5
+
+select * from Producto -- 2190
 
 
-/* FOTO 6
-Mostrar los dos empleados del mes, estos son:
+SELECT 
+	p.prod_codigo as [CODIGO PRODUCTO], 
+	p.prod_detalle as [DETALLE PRODUCTO], 
+	(CASE
+		WHEN c.comp_producto is null THEN 'SIN COMPOSICION'
+		ELSE 'CON COMPOSICION'
+	END) as [DETALLE COMPOSICION], 
+	count(distinct c.comp_componente) as [CANTIDAD DE COMPONENTES], 
+	count(distinct f.fact_cliente) as [CANTIDAD DE VECES COMPRADO]
+FROM Producto p left join Item_Factura it on p.prod_codigo = it.item_producto LEFT JOIN Composicion c on c.comp_producto = p.prod_codigo
+LEFT JOIN Factura f on f.fact_numero + f.fact_sucursal + f.fact_tipo = it.item_numero + it.item_sucursal + it.item_tipo
+group by p.prod_codigo, p.prod_detalle, c.comp_producto
+order by 3 asc
+
+
+
+SELECT 
+*
+FROM Producto p left join Item_Factura it on p.prod_codigo = it.item_producto LEFT JOIN Composicion c on c.comp_producto = p.prod_codigo
+LEFT JOIN Factura f on f.fact_numero + f.fact_sucursal + f.fact_tipo = it.item_numero + it.item_sucursal + it.item_tipo
+group by p.prod_codigo, p.prod_detalle, c.comp_producto
+order by 3 asc
+
+
+
+/*Ejercicio 5 (SQL): mostrar los dos empleados del mes, estos son:
 a) El empleado que en el mes actual (en el cual se ejecuta la query) vendió más en dinero(fact_total).
-b) El segundo empleado del mes, es aquel que en el mes actual (en el cual se ejecuta la query) vendió más cantidades (unidades de productos).
-Se deberá mostrar apellido y nombre del empleado en una sola columna y para el primero un string que diga 'MEJOR FACTURACION' y para el segundo
+b) El segundo empleado del mes, es aquel que en el mes actual (en el cual se ejecuta la query) 
+vendió más cantidades (unidades de productos).
+Se deberá mostrar apellido y nombre del empleado en una sola columna y para el primero un string que diga 
+'MEJOR FACTURACION' y para el segundo
 'VENDIÓ MÁS UNIDADES'.
 NOTA: Si el empleado que más vendió en facturación y cantidades es el mismo, solo mostrar una fila que diga el empleado y 'MEJOR EN TODO'.
-NOTA2: No se debe usar subselect en el from
+NOTA2: No se debe usar subselect en el from.*/
+
+
+
+SELECT
+	RTRIM(e.empl_apellido)+ ' ' +RTRIM(e.empl_nombre) as [APELLIDO Y NOMBRE], 
+	(CASE WHEN  
+			e.empl_codigo in (select top 1 f.fact_vendedor from Factura f
+							where MONTH(f.fact_fecha) = 12 and YEAR(f.fact_fecha) = 2011
+							group by f.fact_vendedor 					
+					        order by sum(f.fact_total) desc) 
+							and	
+								e.empl_codigo in (SELECT top 1 f.fact_vendedor
+							FROM Item_Factura it join Factura f on f.fact_tipo+f.fact_sucursal+f.fact_numero=it.item_tipo+it.item_sucursal+it.item_numero
+							where MONTH(f.fact_fecha) = 12 and YEAR(f.fact_fecha) = 2011
+							group by f.fact_vendedor
+							order by sum(it.item_cantidad) desc) then  'MEJOR EN TODO'
+		WHEN e.empl_codigo in (SELECT top 1 f.fact_vendedor
+							FROM Item_Factura it join Factura f on f.fact_tipo+f.fact_sucursal+f.fact_numero=it.item_tipo+it.item_sucursal+it.item_numero
+							where MONTH(f.fact_fecha) = 12 and YEAR(f.fact_fecha) = 2011
+							group by f.fact_vendedor
+							order by sum(it.item_cantidad) desc
+							) then 'MEJOR EN VENTAS'
+		WHEN e.empl_codigo in (select top 1 f.fact_vendedor from Factura f
+							where MONTH(f.fact_fecha) = 12 and YEAR(f.fact_fecha) = 2011
+							group by f.fact_vendedor
+							order by sum(f.fact_total) desc) then 'MEJOR EN FACTURACION'
+		
+	END) as [MEJOR EN:]
+FROM Empleado e
+WHERE e.empl_codigo in (select top 1 f.fact_vendedor from Factura f
+							where MONTH(f.fact_fecha) = 12 and YEAR(f.fact_fecha) = 2011
+							group by f.fact_vendedor 
+							order by sum(f.fact_total) desc) 
+							or	e.empl_codigo in (SELECT top 1 f.fact_vendedor
+							FROM Item_Factura it join Factura f on f.fact_tipo+f.fact_sucursal+f.fact_numero=it.item_tipo+it.item_sucursal+it.item_numero
+							where MONTH(f.fact_fecha) = 12 and YEAR(f.fact_fecha) = 2011
+							group by f.fact_vendedor
+							order by sum(it.item_cantidad) desc)
+
+/*
+EMPLEADO	MEJOR EN
+E1			FACTURACION
+E2			UNIDADES
+
+
+E1 Y E2 SON IGUALES
+
+
+EMPLEADO    MEJOR EN
+E1			TODO
 */
+
+--MEJOR EN FACTURACION 
+
+select top 1 f.fact_vendedor, sum(f.fact_total) from Factura f
+group by f.fact_vendedor 
+having f.fact_vendedor is not null
+order by sum(f.fact_total) desc
+
+
+--- MEJOR EN CANTIDAD DE UNIDADES VENTIDAD
+
+SELECT top 1 f.fact_vendedor, sum(it.item_cantidad)
+FROM Item_Factura it join Factura f on f.fact_tipo+f.fact_sucursal+f.fact_numero=it.item_tipo+it.item_sucursal+it.item_numero
+group by f.fact_vendedor having f.fact_vendedor is not null
+order by sum(it.item_cantidad) desc
+
+
+select * from empleado
+
 
 
 --EJERCICIO 6
@@ -182,6 +278,63 @@ Solamente se deberán mostrar aquellos clientes que posean al menos 10 facturas o
 El resultado debe ser ordenado por año.
 NOTA: No se permite el uso de sub-selects en el FROM ni funciones definidas por el 
 usuario para este punto.
+*/
+
+
+SELECT
+	YEAR(f.fact_fecha) as [AÑO],
+	f.fact_cliente	as [CLIENTE CON MAS COMPRAS], 
+	COUNT(distinct it.item_producto) as [CANT ARTICULOS DISTINTOS COMPRADOS], 
+	COUNT(distinct p.prod_rubro) as [CANT RUBROS DISTINTOS COMPRADOS]
+FROM Factura f left join Item_factura it on f.fact_numero = it.item_numero and f.fact_sucursal = it.item_sucursal and f.fact_tipo=it.item_tipo
+left join Producto p on p.prod_codigo = it.item_producto
+where f.fact_cliente in (SELECT TOP 1 f1.fact_cliente FROM Factura f1
+		where year(f1.fact_fecha) = YEAR(f.fact_fecha)
+		group by f1.fact_cliente 
+		order by SUM(f1.fact_total) desc)
+group by YEAR(f.fact_fecha), f.fact_cliente
+having (SELECT COUNT(f2.fact_numero+ f2.fact_sucursal+ f2.fact_tipo) FROM Factura f2
+where YEAR(f2.fact_fecha) = YEAR(f.fact_fecha)
+and f.fact_cliente = f2.fact_cliente
+group by f2.fact_cliente)>=10
+
+
+---- cantidad de facturas por año para un determinado clinete
+SELECT f2.fact_cliente, COUNT(f2.fact_numero+ f2.fact_sucursal+ f2.fact_tipo) FROM Factura f2
+--where YEAR(f2.fact_fecha) = YEAR(f.fact_fecha)
+-- and f.fact_cliente = f2.fact_cliente
+group by f2.fact_cliente
+
+-------CLIENTE QUE MAS COMPRO (historico)
+
+SELECT TOP 1 f.fact_cliente, SUM(f.fact_total) FROM Factura f 
+group by f.fact_cliente 
+order by SUM(f.fact_total) desc
+
+-------CLIENTE QUE MAS COMPRO (en un año en particular)
+
+SELECT TOP 1 f1.fact_cliente, SUM(f1.fact_total) FROM Factura f1
+--where year(f1.fact_fecha) = YEAR(f.fact_fecha)
+group by f1.fact_cliente 
+order by SUM(f1.fact_total) desc
+
+
+
+------ CANTIDAD DE ARTICULOS DISNTINTOS COMPRADOS POR CLIENTE
+
+SELECT f.fact_cliente, count(distinct it.item_producto) FROM Item_Factura it JOIN Factura f on f.fact_numero = it.item_numero and f.fact_sucursal = it.item_sucursal and f.fact_tipo=it.item_tipo
+group by f.fact_cliente
+
+
+/*
+	Realizar una consulta SQL que retorne para los 10 clientes que más compraron en el 2012 y que fueron atendidos por más de 3 
+	vendedores distintos:
+    - Apellido y Nombre del Cliente.
+    - Cantidad de Productos distintos comprados en el 2012.
+    - Cantidad de unidades compradas dentro del primer semestre del 2012.
+	El resultado deberá mostrar ordenado la cantidad de ventas descendente del 2012 de cada cliente, en caso de igualdad de ventas, 
+	ordenar por código de cliente.
+	NOTA: No se permite el uso de sub-selects en el FROM ni funciones definidas por el usuario para este punto.
 */
 
 
@@ -199,6 +352,62 @@ Se pide realizar una consulta SQL que retorne todos los clientes que tuvieron ma
 El resultado debe ser ordenado por limite de credito del cliente de mayor a menor
 NOTA: No se permite el uso de sub-selects en el FROM ni funciones definidas por el usuario para este punto
 */
+
+
+SELECT 
+	f.fact_cliente as [CODIGO DEL CLIENTE], 
+	c.clie_razon_social as [RAZON SOCIAL], 
+	isnull((
+		SELECT count(it1.item_producto) FROM Item_Factura it1 
+		join Factura f1 on  f1.fact_numero = it1.item_numero and f1.fact_sucursal = it1.item_sucursal and f1.fact_tipo=it1.item_tipo
+		where it1.item_producto in (select c.comp_producto from Composicion c)
+		and f1.fact_cliente = f.fact_cliente and YEAR(f1.fact_fecha) = 2012
+		group by f1.fact_cliente
+		),0)	 as [CANTIDAD PRODUCTOS COMPUESTOS]
+FROM Factura f join Item_factura it on f.fact_numero = it.item_numero and f.fact_sucursal = it.item_sucursal and f.fact_tipo=it.item_tipo 
+join Cliente c on f.fact_cliente = c.clie_codigo
+WHERE 
+(
+SELECT count(it1.item_producto) FROM Item_Factura it1 
+		join Factura f1 on  f1.fact_numero = it1.item_numero and f1.fact_sucursal = it1.item_sucursal and f1.fact_tipo=it1.item_tipo
+		where YEAR(f1.fact_fecha) = 2012
+		group by f1.fact_cliente
+		having f1.fact_cliente = f.fact_cliente )
+ > 
+ (
+SELECT count(it1.item_producto) FROM Item_Factura it1 
+		join Factura f1 on  f1.fact_numero = it1.item_numero and f1.fact_sucursal = it1.item_sucursal and f1.fact_tipo=it1.item_tipo
+		where YEAR(f1.fact_fecha) = 2011
+		group by f1.fact_cliente
+		having f1.fact_cliente = f.fact_cliente )
+group by f.fact_cliente, c.clie_razon_social,  c.clie_limite_credito
+order by c.clie_limite_credito desc
+
+
+--- CANTIDAD DE PRODUCTOS VENDIDOS PARA UN CLIENTE EN 2011
+
+SELECT f1.fact_cliente, count(distinct it1.item_producto) FROM Item_Factura it1 
+		join Factura f1 on  f1.fact_numero = it1.item_numero and f1.fact_sucursal = it1.item_sucursal and f1.fact_tipo=it1.item_tipo
+		where YEAR(f1.fact_fecha) = 2011
+		group by f1.fact_cliente
+		having f1.fact_cliente = f.fact_cliente 
+
+
+-- CANTIDAD DE PRODUCTOS VENDIDOS EN 2012 
+
+
+SELECT * FROM Factura
+-- cantidad de productos compuestos comprados por un cliente en 2019
+
+SELECT count(distinct it1.item_producto) FROM Item_Factura it1 
+join Factura f1 on  f1.fact_numero = it1.item_numero and f1.fact_sucursal = it1.item_sucursal and f1.fact_tipo=it1.item_tipo
+where it1.item_producto in (select c.comp_producto from Composicion c) and YEAR(f1.fact_fecha) = 2019
+--and f1.fact_cliente = '01634 '
+
+select * from Factura
+
+
+
 
 -- EJERCICIO 8
 
